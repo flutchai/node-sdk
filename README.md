@@ -304,9 +304,9 @@ npm run lint
 
 ## Links
 
-- [GitHub Repository](https://github.com/flutchai/flutch3)
+- [GitHub Repository](https://github.com/flutchai/node-sdk)
 - [NPM Package](https://www.npmjs.com/package/@flutchai/flutch-sdk)
-- [Issues](https://github.com/flutchai/flutch3/issues)
+- [Issues](https://github.com/flutchai/node-sdk/issues)
 
 ## License
 

@@ -3,8 +3,8 @@ import {
   CallbackTokenGuard,
   CallbackRequest,
 } from "../src/api/callback-token.guard";
-import { CallbackRecord } from "@flutchai/flutch-sdk";
-import { CallbackStore } from "../src/callbacks";
+import { CallbackRecord } from "../src/interfaces/callback.interface";
+import { CallbackStore, CallbackACL } from "../src/callbacks";
 
 describe("CallbackTokenGuard", () => {
   const record: CallbackRecord = {
@@ -22,12 +22,18 @@ describe("CallbackTokenGuard", () => {
     const store: Partial<CallbackStore> = {
       getAndLock: jest.fn().mockResolvedValue(storeReturn),
     };
-    const guard = new CallbackTokenGuard(store as CallbackStore);
+    const acl: Partial<CallbackACL> = {
+      validate: jest.fn().mockResolvedValue(undefined),
+    };
+    const guard = new CallbackTokenGuard(
+      store as CallbackStore,
+      acl as CallbackACL
+    );
     const req: Partial<CallbackRequest> = { body };
     const context: Partial<ExecutionContext> = {
-      switchToHttp: () => ({ getRequest: () => req }),
+      switchToHttp: () => ({ getRequest: () => req }) as any,
     };
-    return { guard, req, context: context as ExecutionContext, store };
+    return { guard, req, context: context as ExecutionContext, store, acl };
   };
 
   it("passes and attaches record for valid token", async () => {

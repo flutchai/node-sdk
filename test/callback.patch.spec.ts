@@ -9,7 +9,10 @@ import {
   IdempotencyManager,
   CallbackPatchService,
 } from "../src/callbacks";
-import { CallbackRecord, CallbackPatch } from "@flutchai/flutch-sdk";
+import {
+  CallbackRecord,
+  CallbackPatch,
+} from "../src/interfaces/callback.interface";
 import { IdempotencyStatus } from "../src/callbacks/idempotency-manager";
 
 describe("SmartCallbackRouter patch handling", () => {
