@@ -1,0 +1,67 @@
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main, dev]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  pr-checks:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Check code formatting
+        run: yarn format:check
+
+      - name: Verify no uncommitted changes after formatting check
+        run: |
+          if ! git diff --exit-code; then
+            echo "❌ Code has uncommitted changes after formatting check!"
+            echo "Please run 'yarn format' locally and commit the changes."
+            echo ""
+            echo "Changed files:"
+            git diff --name-only
+            echo ""
+            echo "Detailed changes:"
+            git diff
+            exit 1
+          else
+            echo "✅ Code is properly formatted."
+          fi
+
+      - name: Run tests
+        run: yarn test
+
+      - name: Build SDK
+        run: yarn build
+
+      - name: Verify build artifacts
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "❌ Build artifacts not found!"
+            exit 1
+          fi
+          echo "✅ Build artifacts generated successfully."
+          echo "Generated files:"
+          ls -la dist/ | head -20

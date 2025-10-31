@@ -1,0 +1,42 @@
+# Build outputs
+**/dist/
+**/build/
+**/coverage/
+
+# Dependencies
+**/node_modules/
+
+# Generated files
+yarn.lock
+package-lock.json
+*.tsbuildinfo
+
+# Logs
+*.log
+
+# Environment files
+.env*
+
+# Cache
+.cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# Yarn Modern files
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
