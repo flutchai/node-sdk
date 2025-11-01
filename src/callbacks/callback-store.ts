@@ -3,7 +3,7 @@ import type Redis from "ioredis";
 import {
   CallbackEntry,
   CallbackRecord,
-} from "../interfaces/callback.interface";
+} from "./callback.interface";
 
 /**
  * CallbackStore manages callback tokens and their lifecycle.

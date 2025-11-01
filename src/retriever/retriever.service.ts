@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { RetrieverSearchType } from "../shared-types";
+import { RetrieverSearchType } from "./enums";
 import {
   CustomDocument,
   RetrieveQueryOptions,

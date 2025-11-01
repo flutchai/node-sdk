@@ -4,6 +4,7 @@ dist
 *.log
 .env
 *.tsbuildinfo
+.vscode
 
 # Yarn Modern
 .yarn/*

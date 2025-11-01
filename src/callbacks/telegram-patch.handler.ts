@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { CallbackPatch } from "../interfaces/callback.interface";
+import { CallbackPatch } from "./callback.interface";
 import { CallbackPatchHandler } from "./callback-patch.service";
 
 @Injectable()

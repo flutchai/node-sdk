@@ -1,6 +1,6 @@
 // builder-registry.service.ts
 import { Injectable } from "@nestjs/common";
-import { AbstractGraphBuilder } from "./abstract-graph.builder";
+import { AbstractGraphBuilder } from "../graph/abstract-graph.builder";
 
 @Injectable()
 export class BuilderRegistryService {

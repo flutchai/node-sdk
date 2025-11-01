@@ -3,7 +3,7 @@ import { SmartCallbackRouter } from "./smart-callback.router";
 import {
   CallbackResult,
   CallbackRecord,
-} from "../interfaces/callback.interface";
+} from "./callback.interface";
 
 export class UniversalCallbackService {
   constructor(

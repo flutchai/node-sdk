@@ -1,3 +1,4 @@
+import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { SmartCallbackRouter } from "../src/callbacks/smart-callback.router";
 import {
   CallbackStore,
@@ -8,11 +9,9 @@ import {
   CallbackRateLimiter,
   IdempotencyManager,
   CallbackPatchService,
-} from "../src/callbacks";
-import {
   CallbackRecord,
   CallbackPatch,
-} from "../src/interfaces/callback.interface";
+} from "../src/";
 import { IdempotencyStatus } from "../src/callbacks/idempotency-manager";
 
 describe("SmartCallbackRouter patch handling", () => {

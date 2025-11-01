@@ -11,3 +11,7 @@ export * from "./idempotency-manager";
 export * from "./callback-patch.service";
 export * from "./telegram-patch.handler";
 export * from "./web-patch.handler";
+export * from "./callback.decorators";
+export * from "./callback-token.guard";
+export * from "./callback.controller";
+export * from "./callback.interface";

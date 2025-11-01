@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type Redis from "ioredis";
 import { createHash } from "crypto";
-import { CallbackResult } from "../interfaces/callback.interface";
+import { CallbackResult } from "./callback.interface";
 
 export interface IdempotencyConfig {
   ttlSeconds: number; // How long to cache results

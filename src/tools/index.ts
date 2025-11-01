@@ -1,3 +1,7 @@
+// Tool catalog and configuration
+export * from "./catalog";
+export * from "./config";
+
 // MCP Tool interfaces
 export * from "./mcp.interfaces";
 

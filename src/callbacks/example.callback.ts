@@ -1,4 +1,4 @@
-import { CallbackResult } from "../interfaces/callback.interface";
+import { CallbackResult } from "./callback.interface";
 import { CallbackRegistry } from "./callback-registry";
 
 /**
