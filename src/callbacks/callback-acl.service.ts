@@ -1,5 +1,5 @@
 import { Injectable, ForbiddenException, Logger } from "@nestjs/common";
-import { CallbackRecord } from "../interfaces/callback.interface";
+import { CallbackRecord } from "./callback.interface";
 
 export interface CallbackUser {
   userId: string;

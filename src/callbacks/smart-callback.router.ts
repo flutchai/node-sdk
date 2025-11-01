@@ -3,7 +3,7 @@ import { CallbackRegistry } from "./callback-registry";
 import {
   CallbackRecord,
   CallbackResult,
-} from "../interfaces/callback.interface";
+} from "./callback.interface";
 import { CallbackStore } from "./callback-store";
 import { CallbackACL, CallbackUser } from "./callback-acl.service";
 import { CallbackAuditor } from "./callback-auditor.service";

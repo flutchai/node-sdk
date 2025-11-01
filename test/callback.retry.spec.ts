@@ -1,3 +1,4 @@
+import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 import { UniversalCallbackService } from "../src/callbacks/universal-callback.service";
 import { CallbackRecord } from "../src/interfaces/callback.interface";
 import { CallbackStore, SmartCallbackRouter } from "../src/callbacks";
