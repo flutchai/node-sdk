@@ -377,7 +377,7 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
     try {
       // Dynamically import decorator utilities to avoid circular dependencies
       const { getCallbackMetadata } = await import(
-        "../decorators/callback.decorators"
+        "../decorators/callback.decorators.js"
       );
 
       // Get callback metadata from the current class
@@ -446,7 +446,7 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
     try {
       // Dynamically import decorator utilities to avoid circular dependencies
       const { getEndpointMetadata, createEndpointDescriptors } = await import(
-        "../endpoint-registry/endpoint.decorators"
+        "../endpoint-registry/endpoint.decorators.js"
       );
 
       // Get endpoint metadata from the current class
@@ -782,7 +782,7 @@ export class UniversalGraphService implements IGraphService {
   ): Promise<CallbackResult | null> {
     // Import functions for working with decorators
     const { getCallbackMetadata, findCallbackMethod } = await import(
-      "../decorators/callback.decorators"
+      "../decorators/callback.decorators.js"
     );
 
     // Parse token to extract graph type and handler
