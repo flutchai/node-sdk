@@ -3,9 +3,17 @@ import { Logger } from "@nestjs/common";
 
 const logger = new Logger("ApiCallTracer");
 
-const MAX_STRING_LENGTH = 5000; // Increased to avoid truncating long content
-const MAX_COLLECTION_LENGTH = 50; // Increased to handle multiple tool calls
-const MAX_DEPTH = 15; // Deep enough for LangChain structures, shallow enough to prevent infinite loops
+export interface ApiCallTracerOptions {
+  /** Maximum length for string values before truncation (default: 5000) */
+  maxStringLength?: number;
+  /** Maximum depth for nested object traversal (default: 15) */
+  maxDepth?: number;
+}
+
+export const DEFAULT_TRACER_OPTIONS: Required<ApiCallTracerOptions> = {
+  maxStringLength: 5000,
+  maxDepth: 15,
+};
 
 type LangGraphDispatchFn = (
   eventName: string,
@@ -27,7 +35,8 @@ export interface TraceApiCallResult<TResult> {
 }
 
 export async function traceApiCall<TResult>(
-  execute: () => Promise<TResult>
+  execute: () => Promise<TResult>,
+  options?: ApiCallTracerOptions
 ): Promise<TraceApiCallResult<TResult>> {
   const startedAt = Date.now();
 
@@ -39,7 +48,7 @@ export async function traceApiCall<TResult>(
     const durationMs = completedAt - startedAt;
 
     dispatchApiTraceEvent("custom_api_call_end", {
-      result: sanitizeTraceData(result),
+      result: sanitizeTraceData(result, 0, new WeakSet(), options),
       startedAt,
       completedAt,
       durationMs,
@@ -51,7 +60,7 @@ export async function traceApiCall<TResult>(
     const durationMs = failedAt - startedAt;
 
     dispatchApiTraceEvent("custom_api_call_error", {
-      error: sanitizeTraceError(error),
+      error: sanitizeTraceError(error, options),
       startedAt,
       failedAt,
       durationMs,
@@ -103,8 +112,11 @@ function getLangGraphDispatch(): LangGraphDispatchFn | null {
 export function sanitizeTraceData(
   value: unknown,
   depth = 0,
-  seen = new WeakSet<object>()
+  seen = new WeakSet<object>(),
+  options?: ApiCallTracerOptions
 ): unknown {
+  const opts = { ...DEFAULT_TRACER_OPTIONS, ...options };
+
   if (value === undefined) {
     return undefined;
   }
@@ -114,8 +126,8 @@ export function sanitizeTraceData(
   }
 
   if (typeof value === "string") {
-    return value.length > MAX_STRING_LENGTH
-      ? `${value.slice(0, MAX_STRING_LENGTH)}…`
+    return value.length > opts.maxStringLength
+      ? `${value.slice(0, opts.maxStringLength)}…`
       : value;
   }
 
@@ -132,10 +144,10 @@ export function sanitizeTraceData(
   }
 
   if (value instanceof Error) {
-    return sanitizeTraceError(value);
+    return sanitizeTraceError(value, options);
   }
 
-  if (depth >= MAX_DEPTH) {
+  if (depth >= opts.maxDepth) {
     return Array.isArray(value) ? "[Array]" : "[Object]";
   }
 
@@ -150,20 +162,25 @@ export function sanitizeTraceData(
     if (Array.isArray(value)) {
       // Don't truncate arrays - we need all tool calls, all messages, etc.
       return value
-        .map(item => sanitizeTraceData(item, depth + 1, seen))
+        .map(item => sanitizeTraceData(item, depth + 1, seen, options))
         .filter(item => item !== undefined); // Remove circular refs from array
     }
 
     if (value instanceof Set) {
       return Array.from(value)
-        .map(item => sanitizeTraceData(item, depth + 1, seen))
+        .map(item => sanitizeTraceData(item, depth + 1, seen, options))
         .filter(item => item !== undefined);
     }
 
     if (value instanceof Map) {
       const entries: Record<string, unknown> = {};
       for (const [key, entryValue] of value.entries()) {
-        const sanitized = sanitizeTraceData(entryValue, depth + 1, seen);
+        const sanitized = sanitizeTraceData(
+          entryValue,
+          depth + 1,
+          seen,
+          options
+        );
         if (sanitized !== undefined) {
           entries[String(key)] = sanitized;
         }
@@ -175,7 +192,7 @@ export function sanitizeTraceData(
     for (const [key, entryValue] of Object.entries(
       value as Record<string, unknown>
     )) {
-      const sanitized = sanitizeTraceData(entryValue, depth + 1, seen);
+      const sanitized = sanitizeTraceData(entryValue, depth + 1, seen, options);
       // Skip circular references instead of adding "[Circular]" string
       if (sanitized !== undefined) {
         result[key] = sanitized;
@@ -187,26 +204,33 @@ export function sanitizeTraceData(
   return String(value);
 }
 
-function sanitizeTraceError(error: unknown): Record<string, unknown> {
+function sanitizeTraceError(
+  error: unknown,
+  options?: ApiCallTracerOptions
+): Record<string, unknown> {
+  const opts = { ...DEFAULT_TRACER_OPTIONS, ...options };
+
   if (error instanceof Error) {
     return {
       name: error.name,
       message: error.message,
-      stack: error.stack ? sanitizeTraceData(error.stack) : undefined,
+      stack: error.stack
+        ? sanitizeTraceData(error.stack, 0, new WeakSet(), options)
+        : undefined,
     };
   }
 
   if (typeof error === "string") {
     return {
       message:
-        error.length > MAX_STRING_LENGTH
-          ? `${error.slice(0, MAX_STRING_LENGTH)}…`
+        error.length > opts.maxStringLength
+          ? `${error.slice(0, opts.maxStringLength)}…`
           : error,
     };
   }
 
   return {
     message: "Unknown error",
-    raw: sanitizeTraceData(error),
+    raw: sanitizeTraceData(error, 0, new WeakSet(), options),
   };
 }

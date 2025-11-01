@@ -509,7 +509,7 @@ export class ModelInitializer implements IModelInitializer {
         temperature: defaultTemperature,
         maxTokens: defaultMaxTokens,
         anthropicApiKey: apiToken || process.env.ANTHROPIC_API_KEY,
-      }),
+      }) as unknown as BaseChatModel,
 
     [ModelProvider.COHERE]: ({
       modelName,
