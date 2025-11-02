@@ -11,21 +11,19 @@ import { ConfigModule } from "@nestjs/config";
 import {
   UniversalGraphService,
   AbstractGraphBuilder,
-} from "./abstract-graph.builder";
+} from "../graph/abstract-graph.builder";
 import {
   GraphEngineFactory,
   GraphEngineType,
-} from "../engine/graph-engine.factory";
+} from "../engines/graph-engine.factory";
 import { BuilderRegistryService } from "./builder-registry.service";
-import { GraphController } from "../api/graph.controller";
-import { VersionedGraphService, VersioningConfig } from "../versioning";
-import { IGraphRequestPayload } from "../interfaces";
-import { GraphTypeUtils } from "../utils/graph-type.utils";
-import { EventProcessor } from "../engine/event-processor.utils";
+import { VersionedGraphService, VersioningConfig } from "../graph";
+import { IGraphRequestPayload, GraphController } from "../graph";
+import { EventProcessor } from "../engines/langgraph/event-processor.utils";
 // Remove static Redis import to avoid early connection attempts
 import { Registry } from "prom-client";
 import { DiscoveryModule, MetadataScanner } from "@nestjs/core";
-import { LangGraphEngine } from "../engine/langgraph-engine";
+import { LangGraphEngine } from "../engines/langgraph/langgraph-engine";
 import {
   CallbackStore,
   CallbackRegistry,
@@ -41,11 +39,10 @@ import {
   TelegramPatchHandler,
   WebPatchHandler,
 } from "../callbacks";
-import { CallbackController } from "../api/callback.controller";
-import { UIDispatchController } from "../api/ui-dispatch.controller";
-import { CallbackTokenGuard } from "../api/callback-token.guard";
-import { EndpointRegistry } from "../endpoint-registry";
-import { UIEndpointsDiscoveryService } from "../endpoint-registry/ui-endpoints.discovery";
+import { CallbackController } from "../callbacks";
+import { UIDispatchController } from "../agent-ui/ui-dispatch.controller";
+import { CallbackTokenGuard } from "../callbacks";
+import { EndpointRegistry, UIEndpointsDiscoveryService } from "../agent-ui";
 
 /**
  * Options for UniversalGraphModule configuration

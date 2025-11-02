@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import {
   CallbackRecord,
   CallbackResult,
-} from "../interfaces/callback.interface";
+} from "./callback.interface";
 import { CallbackUser } from "./callback-acl.service";
 import { randomUUID } from "crypto";
 

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { HttpService } from "@nestjs/axios";
 import { firstValueFrom } from "rxjs";
-import { RetrieverSearchType } from "../shared-types";
+import { RetrieverSearchType } from "./enums";
 import { CustomDocument } from "./types";
 
 export interface RetrieverClientConfig {

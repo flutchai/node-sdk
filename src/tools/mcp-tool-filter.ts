@@ -10,12 +10,14 @@ import { McpTool, McpRuntimeClient } from "./mcp.interfaces";
  */
 export class McpToolFilter {
   private readonly logger = new Logger(McpToolFilter.name);
-  private readonly mcpConverter = new McpConverter(this.mcpRuntimeUrl);
+  private readonly mcpConverter: McpConverter;
 
   constructor(
     private readonly mcpRuntimeUrl: string = process.env.MCP_RUNTIME_URL ||
       "http://localhost:3004"
-  ) {}
+  ) {
+    this.mcpConverter = new McpConverter(this.mcpRuntimeUrl);
+  }
 
   /**
    * Fetch available tools from MCP runtime with optional filtering
