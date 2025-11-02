@@ -2,6 +2,8 @@
  * Message tracing types
  */
 
+export type TracingLevel = "info" | "warn" | "error" | "debug";
+
 /** Active tool call during streaming */
 export interface IToolCall {
   name: string;
@@ -11,7 +13,11 @@ export interface IToolCall {
 
 /** Tracing event from graph execution */
 export interface ITracingEvent {
-  timestamp: string;
+  node: string;
   type: string;
-  data?: Record<string, any>;
+  timestamp: number;
+  level: TracingLevel;
+  message: string;
+  data?: any;
+  error?: string;
 }
