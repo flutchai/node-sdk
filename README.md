@@ -4,7 +4,9 @@ Base infrastructure package for building graph microservices with LangGraph and 
 
 ## Overview
 
-`@flutchai/flutch-sdk` is a self-contained foundation package that provides all the essential components needed to build, run, and manage LangGraph-based microservices using NestJS framework.
+`@flutchai/flutch-sdk` is a self-contained foundation package that **turns your graph logic into a production-ready microservice**. Write your graph builder, and the SDK handles everything else: REST API, streaming, health checks, metrics, callbacks, and versioning.
+
+The SDK is designed to be **framework-agnostic** - while it currently provides first-class support for LangGraph.js with NestJS, the architecture allows for supporting other graph frameworks (LlamaIndex, custom implementations, etc.) in the future.
 
 ## What's Included
 
@@ -63,36 +65,163 @@ or
 yarn add @flutchai/flutch-sdk
 ```
 
-## Usage
+## Quick Start
 
-### Creating a Graph Service
+The SDK provides everything you need to quickly launch a production-ready graph service. With minimal setup, you get a fully functional NestJS application with REST API, health checks, metrics, and more.
+
+### 1. Create Your Graph Builder
 
 ```typescript
-import {
-  UniversalGraphModule,
-  AbstractGraphBuilder,
-  IGraphRunnableConfig,
-} from "@flutchai/flutch-sdk";
+import { Injectable } from "@nestjs/common";
+import { AbstractGraphBuilder } from "@flutchai/flutch-sdk";
+import { StateGraph, START, END } from "@langchain/langgraph";
 
 @Injectable()
 export class MyGraphBuilder extends AbstractGraphBuilder<"myGraph"> {
   async buildGraph(config?: any): Promise<CompiledGraphFor<"myGraph">> {
-    // Build your LangGraph here
-    return compiledGraph;
+    // Define your graph logic
+    const graph = new StateGraph(MyState)
+      .addNode("process", async (state) => {
+        // Your processing logic
+        return { result: "processed" };
+      })
+      .addEdge(START, "process")
+      .addEdge("process", END)
+      .compile();
+
+    return graph;
   }
 }
+```
+
+### 2. Register the Module
+
+```typescript
+import { Module } from "@nestjs/common";
+import { UniversalGraphModule } from "@flutchai/flutch-sdk";
 
 @Module({
   imports: [
     UniversalGraphModule.register({
       graphType: "myGraph",
       builder: MyGraphBuilder,
-      // ... other config
     }),
   ],
 })
-export class MyGraphModule {}
+export class AppModule {}
 ```
+
+### 3. Bootstrap Your Application
+
+```typescript
+import { NestFactory } from "@nestjs/core";
+import { AppModule } from "./app.module";
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  await app.listen(3000);
+}
+bootstrap();
+```
+
+That's it! Your graph service is now running with a complete REST API.
+
+## What You Get Out of the Box
+
+Once your service is running, you automatically get:
+
+### REST API Endpoints
+
+The SDK provides ready-to-use controllers with standard endpoints:
+
+#### Graph Execution (`GraphController`)
+- `GET /health` - Service health check
+- `GET /graph-types` - List supported graph types
+- `POST /generate` - Non-streaming generation
+- `POST /stream` - Server-Sent Events (SSE) streaming
+- `POST /cancel/:requestId` - Cancel running generation
+- `GET /registry` - View registered graphs
+- `GET /registry/stats` - Registry statistics
+
+#### Callbacks (`CallbackController`)
+- `POST /callback` - Handle user callbacks with token-based security
+
+#### UI Dispatch (`UIDispatchController`)
+- `POST /api/graph/ui/dispatch` - Dispatch requests to custom UI endpoints
+- `GET /api/graph/:graphType/manifest` - Get graph manifest with UI config
+- `GET /api/graph/:graphType/endpoints` - List available UI endpoints
+- `GET /api/graph/catalog` - Get catalog of all graphs
+
+### Monitoring & Observability
+- Prometheus metrics at `/metrics`
+- Health checks with `@nestjs/terminus`
+- Request/response logging
+- API call tracing with sanitization
+
+### Production Features
+- Helmet security headers
+- Compression middleware
+- Redis-backed callback system
+- OpenAPI/Swagger documentation
+- Error handling and validation
+
+## API Usage Examples
+
+### Non-Streaming Generation
+
+```bash
+curl -X POST http://localhost:3000/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "requestId": "req-123",
+    "graphType": "myGraph",
+    "messages": [
+      { "role": "user", "content": "Hello!" }
+    ]
+  }'
+```
+
+### Streaming Generation (SSE)
+
+```bash
+curl -X POST http://localhost:3000/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "requestId": "req-456",
+    "graphType": "myGraph",
+    "messages": [
+      { "role": "user", "content": "Tell me a story" }
+    ]
+  }'
+```
+
+The stream returns Server-Sent Events:
+```
+event: stream_event
+data: {"type":"chunk","content":"Once upon"}
+
+event: stream_event
+data: {"type":"chunk","content":" a time"}
+
+event: final
+data: {"text":"Once upon a time...","attachments":[],"metadata":{}}
+```
+
+### Check Health
+
+```bash
+curl http://localhost:3000/health
+# Response: {"status":"healthy","timestamp":"2025-11-03T12:00:00.000Z"}
+```
+
+### View Registered Graphs
+
+```bash
+curl http://localhost:3000/registry
+# Response: {"total":1,"graphs":[{"graphType":"myGraph","builderName":"MyGraphBuilder"}]}
+```
+
+## Advanced Usage
 
 ### Using GraphTypeUtils
 
@@ -294,13 +423,88 @@ npm run lint
 - **Graph versioning** utilities
 - **Manifest validation** for graph configurations
 
+## Flutch Platform Integration
+
+The SDK is designed to seamlessly integrate with the **Flutch Platform**, giving you enterprise-grade capabilities out of the box:
+
+### One-Line Platform Connection
+
+```typescript
+UniversalGraphModule.register({
+  graphType: "myGraph",
+  builder: MyGraphBuilder,
+  flutch: {
+    apiKey: process.env.FLUTCH_API_KEY,
+    endpoint: "https://api.flutch.ai"
+  }
+})
+```
+
+### What You Get with Flutch Platform
+
+**Tracing & Analytics**
+- Distributed tracing across all graph executions
+- Performance metrics and bottleneck detection
+- Cost analytics per request and model
+- Token usage tracking
+
+**Multi-Channel UI**
+- Web, Telegram, Slack, WhatsApp support
+- Unified UI components across channels
+- Channel-specific adaptations
+- Custom branding
+
+**Governance & Control**
+- Rate limiting and quota management
+- User-level and company-level limits
+- Budget controls and alerts
+- Usage analytics
+
+**Testing & Quality**
+- A/B testing for graph versions
+- Acceptance testing automation
+- AI-powered test generation
+- Regression testing
+
+**Run Standalone or with Platform**
+
+The SDK works perfectly standalone for self-hosted deployments, or connect to Flutch Platform for advanced features. Your choice.
+
+## Key Benefits
+
+### Instant Service Deployment
+Go from graph logic to deployed microservice in minutes. No need to build REST APIs, implement streaming, or set up monitoring - it's all included.
+
+### Graph Versioning
+Built-in support for versioning your graphs. Run multiple versions simultaneously, test new versions, and roll back safely.
+
+### Framework Flexibility
+Currently supports LangGraph.js. The architecture is designed to support other graph frameworks like LlamaIndex, ensuring your investment is future-proof.
+
+### Developer Experience
+- Type-safe graph definitions with TypeScript
+- Hot reload during development
+- OpenAPI/Swagger documentation auto-generated
+- Comprehensive error handling
+
+### Interactive Capabilities
+- **Callbacks**: Add interactive buttons and user interactions to your graphs
+- **UI Endpoints**: Create custom UI endpoints for dynamic interfaces
+- **Streaming**: Real-time responses with Server-Sent Events
+
+### Production Ready
+- Prometheus metrics for monitoring
+- Health checks for orchestration
+- Redis-backed state management
+- Security headers and compression
+
 ## Use Cases
 
-- Building AI agent microservices with LangGraph
-- Creating conversational AI applications
-- Implementing RAG (Retrieval-Augmented Generation) systems
-- Developing multi-step AI workflows
-- Building interactive AI assistants with callbacks
+- **AI Agent Microservices**: Deploy autonomous agents as scalable services
+- **Conversational AI**: Build chatbots and virtual assistants
+- **RAG Systems**: Implement retrieval-augmented generation workflows
+- **Multi-step Workflows**: Orchestrate complex AI pipelines
+- **Interactive Assistants**: Create agents with callbacks and dynamic UIs
 
 ## Links
 
