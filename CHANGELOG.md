@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2025-11-02
+
+### Changed
+
+- **BREAKING**: Migrated build system from TypeScript compiler to tsup for dual package support (ESM + CJS)
+- Updated package exports to support both `import` (ESM) and `require` (CommonJS)
+- Improved build performance with tsup bundler
+- Enhanced module resolution for better compatibility with different bundlers
+
+### Fixed
+
+- Dual package hazard mitigation through proper package.json exports configuration
+- Type definitions now correctly generated for both ESM (.d.ts) and CJS (.d.cts) formats
+
+### Infrastructure
+
+- Added tsup as build tool replacing direct TypeScript compilation
+- Configured proper dual package exports in package.json
+- Updated build output to dist/ with separate ESM and CJS bundles
+
 ## [0.1.4] - 2025-10-31
 
 ### Added
@@ -66,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/flutchai/node-sdk/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/flutchai/node-sdk/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/flutchai/node-sdk/releases/tag/v0.1.3
