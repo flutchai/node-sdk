@@ -18,8 +18,9 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "types": ["jest", "node"]
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
+  "exclude": ["node_modules", "dist"]
 }
