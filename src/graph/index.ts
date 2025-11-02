@@ -7,3 +7,4 @@ export * from "./graph-manifest.schema";
 export * from "./abstract-graph.builder";
 export * from "./tracing";
 export * from "./versioning";
+export * from "./graph-types";
