@@ -1,9 +1,6 @@
 import { randomBytes } from "crypto";
 import type Redis from "ioredis";
-import {
-  CallbackEntry,
-  CallbackRecord,
-} from "./callback.interface";
+import { CallbackEntry, CallbackRecord } from "./callback.interface";
 
 /**
  * CallbackStore manages callback tokens and their lifecycle.

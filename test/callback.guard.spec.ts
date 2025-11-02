@@ -1,10 +1,6 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { describe, it, expect, jest, beforeEach } from "@jest/globals";
 import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
-import {
-  CallbackTokenGuard,
-  CallbackRequest,
-  CallbackRecord
-} from "../src";
+import { CallbackTokenGuard, CallbackRequest, CallbackRecord } from "../src";
 
 import { CallbackStore, CallbackACL } from "../src/callbacks";
 

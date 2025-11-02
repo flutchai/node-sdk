@@ -1,4 +1,4 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { describe, it, expect, jest, beforeEach } from "@jest/globals";
 import { SmartCallbackRouter } from "../src/callbacks/smart-callback.router";
 import {
   CallbackStore,

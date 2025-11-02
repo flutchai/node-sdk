@@ -1,10 +1,7 @@
 // packages/sdk/src/decorators/callback.decorators.ts
 
 import "reflect-metadata";
-import {
-  CallbackContext,
-  CallbackResult,
-} from "./callback.interface";
+import { CallbackContext, CallbackResult } from "./callback.interface";
 
 /**
  * Metadata for a registered callback

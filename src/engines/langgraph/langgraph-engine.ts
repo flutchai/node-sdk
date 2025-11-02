@@ -15,7 +15,7 @@ export class LangGraphEngine implements IGraphEngine {
     @Inject()
     private readonly eventProcessor: EventProcessor,
     private readonly configService: ConfigService
-  ) { }
+  ) {}
 
   /**
    * Method to invoke LangGraph
