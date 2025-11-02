@@ -1,9 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { CallbackRegistry } from "./callback-registry";
-import {
-  CallbackRecord,
-  CallbackResult,
-} from "../interfaces/callback.interface";
+import { CallbackRecord, CallbackResult } from "./callback.interface";
 import { CallbackStore } from "./callback-store";
 import { CallbackACL, CallbackUser } from "./callback-acl.service";
 import { CallbackAuditor } from "./callback-auditor.service";

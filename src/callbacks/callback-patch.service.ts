@@ -1,8 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import {
-  CallbackRecord,
-  CallbackPatch,
-} from "../interfaces/callback.interface";
+import { CallbackRecord, CallbackPatch } from "./callback.interface";
 import { TelegramPatchHandler } from "./telegram-patch.handler";
 import { WebPatchHandler } from "./web-patch.handler";
 

@@ -1,9 +1,6 @@
 import { CallbackStore } from "./callback-store";
 import { SmartCallbackRouter } from "./smart-callback.router";
-import {
-  CallbackResult,
-  CallbackRecord,
-} from "../interfaces/callback.interface";
+import { CallbackResult, CallbackRecord } from "./callback.interface";
 
 export class UniversalCallbackService {
   constructor(

@@ -1,4 +1,4 @@
-import { CallbackHandler } from "../interfaces/callback.interface";
+import { CallbackHandler } from "./callback.interface";
 
 export class CallbackRegistry {
   private handlers = new Map<string, CallbackHandler>();
