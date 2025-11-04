@@ -81,8 +81,6 @@ export type BaseGraphState = {};
 
 // Standard metadata structure for all graphs
 export interface IGraphMetadata {
-  userId: string;
-  applicationId: string;
   workflowType: string;
   version: string;
 }
@@ -92,6 +90,9 @@ export interface IGraphConfigurable<TGraphSettings = any> {
   thread_id?: string;
   metadata?: IGraphMetadata;
   graphSettings: TGraphSettings;
+  // Runtime context fields (passed from backend)
+  userId?: string;
+  agentId?: string;
 }
 
 // Typed RunnableConfig with our metadata based on LangGraphRunnableConfig
