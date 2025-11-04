@@ -6,6 +6,29 @@ import * as fs from "fs";
 import * as path from "path";
 
 /**
+ * Setup Redis mock for development environment
+ * Intercepts ioredis requires and redirects to ioredis-mock
+ */
+function setupRedisMock() {
+  if (
+    process.env.NODE_ENV === "development" &&
+    !process.env.KUBERNETES_SERVICE_HOST
+  ) {
+    console.log("[REDIS_MOCK] Intercepting ioredis requires for development");
+    const Module = require("module");
+    const originalRequire = Module.prototype.require;
+
+    Module.prototype.require = function (...args: any[]) {
+      if (args[0] === "ioredis") {
+        console.log("[REDIS_MOCK] Redirecting ioredis to ioredis-mock");
+        return originalRequire.apply(this, ["ioredis-mock"]);
+      }
+      return originalRequire.apply(this, args);
+    };
+  }
+}
+
+/**
  * Check port availability
  */
 async function isPortAvailable(port: number): Promise<boolean> {
@@ -177,12 +200,15 @@ export async function bootstrap(
   AppModule: any,
   options: { port?: number; globalPrefix?: string } = {}
 ) {
+  // Setup Redis mock for development (must be called before any module imports)
+  setupRedisMock();
+
   const app = await NestFactory.create(AppModule);
   const logger = new Logger("Bootstrap");
 
   // Configuration
   const requestedPort =
-    options.port || parseInt(process.env.PORT || "3000", 10);
+    options.port || parseInt(process.env.PORT || "3100", 10);
   const port = await findAvailablePort(requestedPort);
   const globalPrefix = options.globalPrefix;
 

@@ -12,7 +12,6 @@ export class LangGraphEngine implements IGraphEngine {
   private readonly logger = new Logger(LangGraphEngine.name);
 
   constructor(
-    @Inject()
     private readonly eventProcessor: EventProcessor,
     private readonly configService: ConfigService
   ) {}

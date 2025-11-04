@@ -150,6 +150,8 @@ function createMetaBuilder(
 export class UniversalGraphModule {
   static forRoot(options: UniversalGraphModuleOptions): DynamicModule {
     const providers: Provider[] = [
+      // Discovery services from @nestjs/core
+      MetadataScanner,
       // Event processor for stream handling
       EventProcessor,
       // Graph engines
@@ -179,14 +181,8 @@ export class UniversalGraphModule {
         provide: CallbackRegistry,
         useClass: CallbackRegistry,
       },
-      {
-        provide: EndpointRegistry,
-        useClass: EndpointRegistry,
-      },
-      {
-        provide: UIEndpointsDiscoveryService,
-        useClass: UIEndpointsDiscoveryService,
-      },
+      EndpointRegistry,
+      UIEndpointsDiscoveryService,
       {
         provide: CallbackACL,
         useClass: CallbackACL,
@@ -275,15 +271,6 @@ export class UniversalGraphModule {
           registerFinanceExampleCallback(registry);
         },
         inject: [CallbackRegistry],
-      },
-      {
-        provide: "UI_ENDPOINTS_DISCOVERY",
-        useFactory: async (discoveryService: UIEndpointsDiscoveryService) => {
-          // Auto-discover and register all UI endpoints from the entire application
-          await discoveryService.discoverUIEndpoints();
-          return true;
-        },
-        inject: [UIEndpointsDiscoveryService],
       },
       {
         provide: "GRAPH_ENGINE",

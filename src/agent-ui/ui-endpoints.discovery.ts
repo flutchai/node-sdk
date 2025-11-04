@@ -1,5 +1,5 @@
 // packages/sdk/src/endpoint-registry/ui-endpoints.discovery.ts
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit, Optional } from "@nestjs/common";
 import { DiscoveryService, MetadataScanner } from "@nestjs/core";
 import { EndpointRegistry } from "./endpoint.registry";
 import {
@@ -13,14 +13,18 @@ import {
  * and automatically registers them with the EndpointRegistry
  */
 @Injectable()
-export class UIEndpointsDiscoveryService {
+export class UIEndpointsDiscoveryService implements OnModuleInit {
   private readonly logger = new Logger(UIEndpointsDiscoveryService.name);
 
   constructor(
-    private readonly discoveryService: DiscoveryService,
-    private readonly metadataScanner: MetadataScanner,
+    @Optional() private readonly discoveryService: DiscoveryService,
+    @Optional() private readonly metadataScanner: MetadataScanner,
     private readonly endpointRegistry: EndpointRegistry
   ) {}
+
+  async onModuleInit() {
+    await this.discoverUIEndpoints();
+  }
 
   /**
    * Discover and register all UI endpoint classes
@@ -28,6 +32,12 @@ export class UIEndpointsDiscoveryService {
    */
   async discoverUIEndpoints(): Promise<void> {
     this.logger.log("Starting UI endpoints discovery...");
+
+    // Check if DiscoveryService is available
+    if (!this.discoveryService) {
+      this.logger.warn("DiscoveryService not available, skipping UI endpoints discovery");
+      return;
+    }
 
     // Get all providers from the entire application
     const providers = this.discoveryService.getProviders();
