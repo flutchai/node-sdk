@@ -10,6 +10,7 @@ export * from "./messages";
 export * from "./models";
 export * from "./retriever";
 export * from "./utils";
+export * from "./service-discovery";
 
 // ===== LEGACY (for backward compatibility) =====
 // Export aliases for core components

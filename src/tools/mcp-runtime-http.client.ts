@@ -1,6 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
 import axios, { AxiosInstance } from "axios";
-import { McpTool, ToolExecutionResult, McpRuntimeClient } from "./mcp.interfaces";
+import {
+  McpTool,
+  ToolExecutionResult,
+  McpRuntimeClient,
+} from "./mcp.interfaces";
 
 /**
  * HTTP client implementation for MCP Runtime
@@ -13,13 +17,16 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
   private readonly baseUrl: string;
 
   constructor(mcpRuntimeUrl?: string) {
-    this.baseUrl = mcpRuntimeUrl || process.env.MCP_RUNTIME_URL || "http://localhost:3004";
+    this.baseUrl =
+      mcpRuntimeUrl || process.env.MCP_RUNTIME_URL || "http://localhost:3004";
     this.httpClient = axios.create({
       baseURL: this.baseUrl,
       timeout: 30000, // 30 seconds
     });
 
-    this.logger.log(`MCP Runtime HTTP Client initialized with URL: ${this.baseUrl}`);
+    this.logger.log(
+      `MCP Runtime HTTP Client initialized with URL: ${this.baseUrl}`
+    );
   }
 
   /**
@@ -42,7 +49,11 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
   /**
    * Execute a tool by name with given arguments
    */
-  async executeTool(name: string, args: any, context?: any): Promise<ToolExecutionResult> {
+  async executeTool(
+    name: string,
+    args: any,
+    context?: any
+  ): Promise<ToolExecutionResult> {
     try {
       this.logger.debug(`Executing tool: ${name} with args:`, args);
 

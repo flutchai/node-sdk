@@ -64,7 +64,6 @@ async function findAvailablePort(startPort: number): Promise<number> {
  * which is an optional dependency. Commented out for standalone SDK usage.
  * Uncomment and install @amelie/graph-service-registry if needed.
  */
-/*
 async function registerWithServiceDiscovery(
   AppModule: any,
   port: number,
@@ -72,12 +71,20 @@ async function registerWithServiceDiscovery(
   app?: any
 ): Promise<void> {
   try {
-    // Dynamic import to avoid circular dependencies
-    const { FileBasedDiscovery } = await import(
-      "@amelie/graph-service-registry/dist/service-discovery/file-based.discovery"
+    logger.debug(
+      "[SERVICE_DISCOVERY] Starting service discovery registration..."
     );
 
+    // Import FileBasedDiscovery from SDK
+    const { FileBasedDiscovery } = await import(
+      "../service-discovery/file-based.discovery"
+    );
+
+    logger.debug(
+      "[SERVICE_DISCOVERY] FileBasedDiscovery imported successfully"
+    );
     const discovery = new FileBasedDiscovery();
+    logger.debug("[SERVICE_DISCOVERY] FileBasedDiscovery instance created");
 
     // Derive service name from module name
     const serviceName = AppModule.name.replace("Module", "").toLowerCase();
@@ -88,7 +95,7 @@ async function registerWithServiceDiscovery(
       if (app) {
         // Get BuilderRegistry from application
         const { BuilderRegistryService } = await import(
-          "./core/builder-registry.service"
+          "./builder-registry.service"
         );
         const builderRegistry = app.get(BuilderRegistryService, {
           strict: false,
@@ -107,7 +114,7 @@ async function registerWithServiceDiscovery(
           try {
             logger.debug("Attempting to import VersionedGraphService...");
             const { VersionedGraphService } = await import(
-              "./versioning/versioned-graph.service"
+              "../graph/versioning/versioned-graph.service"
             );
             logger.debug("VersionedGraphService imported successfully");
 
@@ -191,7 +198,6 @@ async function registerWithServiceDiscovery(
     logger.warn(`Failed to register with service discovery: ${error.message}`);
   }
 }
-*/
 
 /**
  * Bootstrap function for graph microservices
@@ -258,8 +264,14 @@ export async function bootstrap(
 
   // Service Discovery Registration (only in development)
   if (process.env.NODE_ENV !== "production") {
-    // Disabled: requires optional @amelie/graph-service-registry dependency
-    // await registerWithServiceDiscovery(AppModule, port, logger, app);
+    logger.debug(
+      `Attempting service discovery registration (NODE_ENV: ${process.env.NODE_ENV || "undefined"})`
+    );
+    await registerWithServiceDiscovery(AppModule, port, logger, app);
+  } else {
+    logger.debug(
+      `Skipping service discovery registration (NODE_ENV: ${process.env.NODE_ENV})`
+    );
   }
 
   return app;
