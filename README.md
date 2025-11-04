@@ -81,7 +81,7 @@ export class MyGraphBuilder extends AbstractGraphBuilder<"myGraph"> {
   async buildGraph(config?: any): Promise<CompiledGraphFor<"myGraph">> {
     // Define your graph logic
     const graph = new StateGraph(MyState)
-      .addNode("process", async (state) => {
+      .addNode("process", async state => {
         // Your processing logic
         return { result: "processed" };
       })
@@ -135,6 +135,7 @@ Once your service is running, you automatically get:
 The SDK provides ready-to-use controllers with standard endpoints:
 
 #### Graph Execution (`GraphController`)
+
 - `GET /health` - Service health check
 - `GET /graph-types` - List supported graph types
 - `POST /generate` - Non-streaming generation
@@ -144,21 +145,25 @@ The SDK provides ready-to-use controllers with standard endpoints:
 - `GET /registry/stats` - Registry statistics
 
 #### Callbacks (`CallbackController`)
+
 - `POST /callback` - Handle user callbacks with token-based security
 
 #### UI Dispatch (`UIDispatchController`)
+
 - `POST /api/graph/ui/dispatch` - Dispatch requests to custom UI endpoints
 - `GET /api/graph/:graphType/manifest` - Get graph manifest with UI config
 - `GET /api/graph/:graphType/endpoints` - List available UI endpoints
 - `GET /api/graph/catalog` - Get catalog of all graphs
 
 ### Monitoring & Observability
+
 - Prometheus metrics at `/metrics`
 - Health checks with `@nestjs/terminus`
 - Request/response logging
 - API call tracing with sanitization
 
 ### Production Features
+
 - Helmet security headers
 - Compression middleware
 - Redis-backed callback system
@@ -196,6 +201,7 @@ curl -X POST http://localhost:3000/stream \
 ```
 
 The stream returns Server-Sent Events:
+
 ```
 event: stream_event
 data: {"type":"chunk","content":"Once upon"}
@@ -435,32 +441,36 @@ UniversalGraphModule.register({
   builder: MyGraphBuilder,
   flutch: {
     apiKey: process.env.FLUTCH_API_KEY,
-    endpoint: "https://api.flutch.ai"
-  }
-})
+    endpoint: "https://api.flutch.ai",
+  },
+});
 ```
 
 ### What You Get with Flutch Platform
 
 **Tracing & Analytics**
+
 - Distributed tracing across all graph executions
 - Performance metrics and bottleneck detection
 - Cost analytics per request and model
 - Token usage tracking
 
 **Multi-Channel UI**
+
 - Web, Telegram, Slack, WhatsApp support
 - Unified UI components across channels
 - Channel-specific adaptations
 - Custom branding
 
 **Governance & Control**
+
 - Rate limiting and quota management
 - User-level and company-level limits
 - Budget controls and alerts
 - Usage analytics
 
 **Testing & Quality**
+
 - A/B testing for graph versions
 - Acceptance testing automation
 - AI-powered test generation
@@ -473,26 +483,32 @@ The SDK works perfectly standalone for self-hosted deployments, or connect to Fl
 ## Key Benefits
 
 ### Instant Service Deployment
+
 Go from graph logic to deployed microservice in minutes. No need to build REST APIs, implement streaming, or set up monitoring - it's all included.
 
 ### Graph Versioning
+
 Built-in support for versioning your graphs. Run multiple versions simultaneously, test new versions, and roll back safely.
 
 ### Framework Flexibility
+
 Currently supports LangGraph.js. The architecture is designed to support other graph frameworks like LlamaIndex, ensuring your investment is future-proof.
 
 ### Developer Experience
+
 - Type-safe graph definitions with TypeScript
 - Hot reload during development
 - OpenAPI/Swagger documentation auto-generated
 - Comprehensive error handling
 
 ### Interactive Capabilities
+
 - **Callbacks**: Add interactive buttons and user interactions to your graphs
 - **UI Endpoints**: Create custom UI endpoints for dynamic interfaces
 - **Streaming**: Real-time responses with Server-Sent Events
 
 ### Production Ready
+
 - Prometheus metrics for monitoring
 - Health checks for orchestration
 - Redis-backed state management

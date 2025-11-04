@@ -35,7 +35,9 @@ export class UIEndpointsDiscoveryService implements OnModuleInit {
 
     // Check if DiscoveryService is available
     if (!this.discoveryService) {
-      this.logger.warn("DiscoveryService not available, skipping UI endpoints discovery");
+      this.logger.warn(
+        "DiscoveryService not available, skipping UI endpoints discovery"
+      );
       return;
     }
 

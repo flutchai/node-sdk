@@ -71,14 +71,18 @@ async function registerWithServiceDiscovery(
   app?: any
 ): Promise<void> {
   try {
-    logger.debug("[SERVICE_DISCOVERY] Starting service discovery registration...");
+    logger.debug(
+      "[SERVICE_DISCOVERY] Starting service discovery registration..."
+    );
 
     // Import FileBasedDiscovery from SDK
     const { FileBasedDiscovery } = await import(
       "../service-discovery/file-based.discovery"
     );
 
-    logger.debug("[SERVICE_DISCOVERY] FileBasedDiscovery imported successfully");
+    logger.debug(
+      "[SERVICE_DISCOVERY] FileBasedDiscovery imported successfully"
+    );
     const discovery = new FileBasedDiscovery();
     logger.debug("[SERVICE_DISCOVERY] FileBasedDiscovery instance created");
 
@@ -260,10 +264,14 @@ export async function bootstrap(
 
   // Service Discovery Registration (only in development)
   if (process.env.NODE_ENV !== "production") {
-    logger.debug(`Attempting service discovery registration (NODE_ENV: ${process.env.NODE_ENV || 'undefined'})`);
+    logger.debug(
+      `Attempting service discovery registration (NODE_ENV: ${process.env.NODE_ENV || "undefined"})`
+    );
     await registerWithServiceDiscovery(AppModule, port, logger, app);
   } else {
-    logger.debug(`Skipping service discovery registration (NODE_ENV: ${process.env.NODE_ENV})`);
+    logger.debug(
+      `Skipping service discovery registration (NODE_ENV: ${process.env.NODE_ENV})`
+    );
   }
 
   return app;
