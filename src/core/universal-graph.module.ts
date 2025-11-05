@@ -1,32 +1,28 @@
 // packages/sdk/src/universal-graph.module.ts
-import {
-  DynamicModule,
-  Module,
-  Provider,
-  OnModuleInit,
-  Optional,
-} from "@nestjs/common";
-import { ModuleRef } from "@nestjs/core";
+import { DynamicModule, Module, Provider } from "@nestjs/common";
+import { ModuleRef, DiscoveryModule, MetadataScanner } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
 import {
-  UniversalGraphService,
   AbstractGraphBuilder,
-} from "../graph/abstract-graph.builder";
+  IGraphRequestPayload,
+  GraphController,
+  UniversalGraphService,
+  VersionedGraphService,
+  VersioningConfig,
+} from "../graph";
 import {
+  EventProcessor,
   GraphEngineFactory,
   GraphEngineType,
-} from "../engines/graph-engine.factory";
+  LangGraphEngine,
+} from "../engines";
 import { BuilderRegistryService } from "./builder-registry.service";
-import { VersionedGraphService, VersioningConfig } from "../graph";
-import { IGraphRequestPayload, GraphController } from "../graph";
-import { EventProcessor } from "../engines/langgraph/event-processor.utils";
-// Remove static Redis import to avoid early connection attempts
 import { Registry } from "prom-client";
-import { DiscoveryModule, MetadataScanner } from "@nestjs/core";
-import { LangGraphEngine } from "../engines/langgraph/langgraph-engine";
 import {
   CallbackStore,
   CallbackRegistry,
+  CallbackController,
+  CallbackTokenGuard,
   SmartCallbackRouter,
   UniversalCallbackService,
   registerFinanceExampleCallback,
@@ -39,10 +35,11 @@ import {
   TelegramPatchHandler,
   WebPatchHandler,
 } from "../callbacks";
-import { CallbackController } from "../callbacks";
-import { UIDispatchController } from "../agent-ui/ui-dispatch.controller";
-import { CallbackTokenGuard } from "../callbacks";
-import { EndpointRegistry, UIEndpointsDiscoveryService } from "../agent-ui";
+import {
+  EndpointRegistry,
+  UIEndpointsDiscoveryService,
+  UIDispatchController,
+} from "../agent-ui";
 
 /**
  * Options for UniversalGraphModule configuration
