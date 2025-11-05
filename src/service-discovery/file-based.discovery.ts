@@ -16,7 +16,7 @@ interface ServiceRegistration {
 
 /**
  * File-based service discovery for local development
- * Services are registered in ~/.amelie/services/
+ * Services are registered in ~/.flutch/services/
  */
 @Injectable()
 export class FileBasedDiscovery implements ServiceDiscoveryProvider {
@@ -24,7 +24,7 @@ export class FileBasedDiscovery implements ServiceDiscoveryProvider {
   private readonly servicesDir: string;
 
   constructor() {
-    this.servicesDir = path.join(os.homedir(), ".amelie", "services");
+    this.servicesDir = path.join(os.homedir(), ".flutch", "services");
     this.ensureServicesDirectory();
     this.cleanupStaleServices();
   }
@@ -210,7 +210,7 @@ export class FileBasedDiscovery implements ServiceDiscoveryProvider {
    */
   private ensureServicesDirectory(): void {
     try {
-      const amelieDir = path.join(os.homedir(), ".amelie");
+      const amelieDir = path.join(os.homedir(), ".flutch");
       if (!fs.existsSync(amelieDir)) {
         fs.mkdirSync(amelieDir, { recursive: true });
       }

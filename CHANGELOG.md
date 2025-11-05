@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2025-11-05
+
+### Added
+
+- Added `class-transformer` and `class-validator` dependencies for enhanced data validation and transformation support
+
+### Changed
+
+- Refactored imports in `universal-graph.module.ts` for improved code organization and readability
+- Updated service discovery paths from `.amelie` to `.flutch` for consistent branding
+- Organized module imports to follow consistent grouping pattern
+
+### Infrastructure
+
+- Updated dependencies: class-transformer@^0.5.1, class-validator@^0.14.2
+
 ## [0.1.5] - 2025-11-02
 
 ### Changed
@@ -86,7 +102,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/flutchai/node-sdk/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/flutchai/node-sdk/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/flutchai/node-sdk/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/flutchai/node-sdk/releases/tag/v0.1.3
