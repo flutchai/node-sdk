@@ -128,7 +128,8 @@ export class EventProcessor {
       } else if (raw.type === "input_json_delta") {
         // input_json_delta.input contains execution result (streaming) → output
         if (currentToolUse) {
-          currentToolUse.output = (currentToolUse.output || "") + (raw.input || "");
+          currentToolUse.output =
+            (currentToolUse.output || "") + (raw.input || "");
         }
       } else {
         // Regular step (text, thinking, tool_result)
@@ -226,12 +227,14 @@ export class EventProcessor {
 
           // Send step_started event
           if (onPartial) {
-            onPartial(JSON.stringify({
-              processing_delta: {
-                type: 'step_started',
-                step: acc.currentToolUse
-              }
-            }));
+            onPartial(
+              JSON.stringify({
+                processing_delta: {
+                  type: "step_started",
+                  step: acc.currentToolUse,
+                },
+              })
+            );
           }
         } else if (block.type === "input_json_delta") {
           // Accumulate output and send chunk
@@ -240,13 +243,15 @@ export class EventProcessor {
             acc.currentToolUse.output += chunk;
 
             // Send output_chunk event
-            onPartial(JSON.stringify({
-              processing_delta: {
-                type: 'output_chunk',
-                stepId: acc.currentToolUse.id,
-                chunk: chunk
-              }
-            }));
+            onPartial(
+              JSON.stringify({
+                processing_delta: {
+                  type: "output_chunk",
+                  stepId: acc.currentToolUse.id,
+                  chunk: chunk,
+                },
+              })
+            );
           }
         }
       }
@@ -309,11 +314,13 @@ export class EventProcessor {
 
           // Send chain_completed event
           if (onPartial) {
-            onPartial(JSON.stringify({
-              processing_delta: {
-                type: 'chain_completed'
-              }
-            }));
+            onPartial(
+              JSON.stringify({
+                processing_delta: {
+                  type: "chain_completed",
+                },
+              })
+            );
           }
 
           // Reset for next chain
@@ -332,7 +339,10 @@ export class EventProcessor {
           if (Array.isArray(stepsRaw)) {
             // Map tool_use and input_json_delta to proper structure
             steps = this.mapReasoningSteps(stepsRaw);
-          } else if (typeof stepsRaw === "string" && stepsRaw.trim().length > 0) {
+          } else if (
+            typeof stepsRaw === "string" &&
+            stepsRaw.trim().length > 0
+          ) {
             // Convert string to single text step
             // This happens when LLM returns reasoning as plain text instead of structured steps
             steps = [
@@ -355,11 +365,13 @@ export class EventProcessor {
 
             // Send chain_completed event
             if (onPartial) {
-              onPartial(JSON.stringify({
-                processing_delta: {
-                  type: 'chain_completed'
-                }
-              }));
+              onPartial(
+                JSON.stringify({
+                  processing_delta: {
+                    type: "chain_completed",
+                  },
+                })
+              );
             }
           }
         }
