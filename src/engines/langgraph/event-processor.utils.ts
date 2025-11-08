@@ -36,6 +36,9 @@ export interface StreamAccumulator {
   traceEvents: IGraphTraceEvent[];
   traceStartedAt: number | null;
   traceCompletedAt: number | null;
+  // Real-time reasoning step accumulator for streaming
+  currentReasoningSteps: IReasoningStep[]; // Current reasoning steps being accumulated
+  currentToolUse: IReasoningStep | null; // Current tool_use being built from input_json_delta events
 }
 
 /**
@@ -58,6 +61,8 @@ export class EventProcessor {
       traceEvents: [],
       traceStartedAt: null,
       traceCompletedAt: null,
+      currentReasoningSteps: [],
+      currentToolUse: null,
     };
   }
 
@@ -92,6 +97,61 @@ export class EventProcessor {
     }
 
     return [];
+  }
+
+  /**
+   * Groups tool_use and input_json_delta into proper structure
+   * tool_use.input → output (tool execution result)
+   * input_json_delta.input → output (tool execution result, accumulated)
+   */
+  private mapReasoningSteps(rawSteps: any[]): IReasoningStep[] {
+    const steps: IReasoningStep[] = [];
+    let currentToolUse: IReasoningStep | null = null;
+
+    for (const raw of rawSteps) {
+      if (raw.type === "tool_use" || raw.type === "tool_call") {
+        // Save previous tool_use if exists
+        if (currentToolUse) {
+          steps.push(currentToolUse);
+        }
+
+        // Create new tool_use
+        // tool_use.input contains tool execution result (OUT)
+        currentToolUse = {
+          index: raw.index || 0,
+          type: "tool_use",
+          name: raw.name,
+          id: raw.id,
+          input: "", // Parameters (IN) - filled separately or empty
+          output: raw.input || "", // Result (OUT) - comes in tool_use.input
+        };
+      } else if (raw.type === "input_json_delta") {
+        // input_json_delta.input contains execution result (streaming) → output
+        if (currentToolUse) {
+          currentToolUse.output = (currentToolUse.output || "") + (raw.input || "");
+        }
+      } else {
+        // Regular step (text, thinking, tool_result)
+        if (currentToolUse) {
+          steps.push(currentToolUse);
+          currentToolUse = null;
+        }
+
+        steps.push({
+          index: raw.index || 0,
+          type: raw.type,
+          text: raw.text || "",
+          metadata: raw.metadata,
+        });
+      }
+    }
+
+    // Don't forget the last tool_use
+    if (currentToolUse) {
+      steps.push(currentToolUse);
+    }
+
+    return steps;
   }
 
   /**
@@ -135,7 +195,7 @@ export class EventProcessor {
       return;
     }
 
-    // 2. Streaming PROCESSING channel: normalize and send to UI
+    // 2. Streaming PROCESSING channel: send delta events
     if (
       event.event === "on_chat_model_stream" &&
       event.metadata?.stream_channel === StreamChannel.PROCESSING &&
@@ -146,8 +206,49 @@ export class EventProcessor {
       // Normalize content to array of blocks
       const blocks = this.normalizeContentBlocks(chunk);
 
-      if (blocks.length > 0 && onPartial) {
-        onPartial(JSON.stringify({ processing: blocks }));
+      // Process each block and send delta updates
+      for (const block of blocks) {
+        if (block.type === "tool_use" || block.type === "tool_call") {
+          // Save previous tool_use if exists
+          if (acc.currentToolUse) {
+            acc.currentReasoningSteps.push(acc.currentToolUse);
+          }
+
+          // Create new tool_use
+          acc.currentToolUse = {
+            index: acc.currentReasoningSteps.length,
+            type: "tool_use",
+            name: block.name,
+            id: block.id,
+            input: block.input || "",
+            output: "",
+          };
+
+          // Send step_started event
+          if (onPartial) {
+            onPartial(JSON.stringify({
+              processing_delta: {
+                type: 'step_started',
+                step: acc.currentToolUse
+              }
+            }));
+          }
+        } else if (block.type === "input_json_delta") {
+          // Accumulate output and send chunk
+          if (acc.currentToolUse && onPartial) {
+            const chunk = block.input || "";
+            acc.currentToolUse.output += chunk;
+
+            // Send output_chunk event
+            onPartial(JSON.stringify({
+              processing_delta: {
+                type: 'output_chunk',
+                stepId: acc.currentToolUse.id,
+                chunk: chunk
+              }
+            }));
+          }
+        }
       }
 
       return;
@@ -191,40 +292,76 @@ export class EventProcessor {
         );
       }
 
-      // Also collect reasoning chains from PROCESSING channel
+      // Finalize reasoning chain from PROCESSING channel
       if (event.metadata?.stream_channel === StreamChannel.PROCESSING) {
-        const stepsRaw =
-          output?.content || // AIMessageChunk object (direct)
-          output?.kwargs?.content || // Serialized LangChain format
-          event.data?.chunk?.content || // Older version
-          [];
-
-        let steps: IReasoningStep[];
-
-        // Normalize to array of IReasoningStep
-        if (Array.isArray(stepsRaw)) {
-          // Already correct format - array of reasoning steps
-          steps = stepsRaw;
-        } else if (typeof stepsRaw === "string" && stepsRaw.trim().length > 0) {
-          // Convert string to single text step
-          // This happens when LLM returns reasoning as plain text instead of structured steps
-          steps = [
-            {
-              index: 0,
-              type: "text",
-              text: stepsRaw.trim(),
-            },
-          ];
-        } else {
-          // Empty or invalid - skip
-          steps = [];
+        // Finalize any pending tool_use
+        if (acc.currentToolUse) {
+          acc.currentReasoningSteps.push(acc.currentToolUse);
+          acc.currentToolUse = null;
         }
 
-        if (steps.length > 0) {
+        // Save completed chain
+        if (acc.currentReasoningSteps.length > 0) {
           acc.reasoningChains.push({
-            steps,
+            steps: acc.currentReasoningSteps,
             isComplete: true,
           });
+
+          // Send chain_completed event
+          if (onPartial) {
+            onPartial(JSON.stringify({
+              processing_delta: {
+                type: 'chain_completed'
+              }
+            }));
+          }
+
+          // Reset for next chain
+          acc.currentReasoningSteps = [];
+        } else {
+          // Fallback: parse from output if streaming didn't accumulate steps
+          const stepsRaw =
+            output?.content || // AIMessageChunk object (direct)
+            output?.kwargs?.content || // Serialized LangChain format
+            event.data?.chunk?.content || // Older version
+            [];
+
+          let steps: IReasoningStep[];
+
+          // Normalize to array of IReasoningStep
+          if (Array.isArray(stepsRaw)) {
+            // Map tool_use and input_json_delta to proper structure
+            steps = this.mapReasoningSteps(stepsRaw);
+          } else if (typeof stepsRaw === "string" && stepsRaw.trim().length > 0) {
+            // Convert string to single text step
+            // This happens when LLM returns reasoning as plain text instead of structured steps
+            steps = [
+              {
+                index: 0,
+                type: "text",
+                text: stepsRaw.trim(),
+              },
+            ];
+          } else {
+            // Empty or invalid - skip
+            steps = [];
+          }
+
+          if (steps.length > 0) {
+            acc.reasoningChains.push({
+              steps,
+              isComplete: true,
+            });
+
+            // Send chain_completed event
+            if (onPartial) {
+              onPartial(JSON.stringify({
+                processing_delta: {
+                  type: 'chain_completed'
+                }
+              }));
+            }
+          }
         }
       }
       return;
