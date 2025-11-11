@@ -18,6 +18,7 @@ export enum GraphEngineType {
 @Injectable()
 export class GraphEngineFactory {
   constructor(private readonly langgraph: LangGraphEngine) {}
+
   /**
    * Get engine for the specified type
    */

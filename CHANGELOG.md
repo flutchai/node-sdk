@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] - 2025-11-11
+
+### Changed
+
+- Refactored dependency injection system in UniversalGraphModule
+- Added explicit factory providers for EventProcessor and LangGraphEngine
+- Made ConfigService optional in LangGraphEngine with proper null safety checks
+- Simplified GRAPH_ENGINE provider to directly use LangGraphEngine instance
+
+### Fixed
+
+- Fixed potential undefined dependency injection issues in NestJS module
+- Added validation logging for dependency injection to catch initialization errors early
+- Improved error handling for missing EventProcessor and ConfigService dependencies
+
+### Code Quality
+
+- Removed debug logging from AbstractGraphBuilder
+- Applied consistent code formatting with Prettier
+- Enhanced module initialization robustness
+
 ## [0.1.6] - 2025-11-05
 
 ### Added
@@ -102,7 +123,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/flutchai/node-sdk/compare/v0.1.6...v0.1.8
 [0.1.6]: https://github.com/flutchai/node-sdk/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/flutchai/node-sdk/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/flutchai/node-sdk/compare/v0.1.3...v0.1.4
