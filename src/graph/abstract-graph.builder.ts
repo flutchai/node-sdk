@@ -90,11 +90,6 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
       return `${this.manifest.companySlug}.${this.manifest.name}::${this.version}`;
     }
 
-    // Debug logging
-    console.log(
-      `DEBUG graphType: manifest=${!!this.manifest}, companySlug=${this.manifest?.companySlug}, name=${this.manifest?.name}, version=${this.version}`
-    );
-
     // Fallback - will be determined when manifest is loaded
     return `unknown::${this.version}`;
   }
@@ -539,6 +534,9 @@ export class UniversalGraphService implements IGraphService {
     private readonly endpointRegistry: EndpointRegistry
   ) {
     this.logger.log("UniversalGraphService initialized");
+    if (!this.engine) {
+      this.logger.error("GRAPH_ENGINE is not properly injected!");
+    }
   }
 
   /**

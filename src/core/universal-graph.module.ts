@@ -150,9 +150,17 @@ export class UniversalGraphModule {
       // Discovery services from @nestjs/core
       MetadataScanner,
       // Event processor for stream handling
-      EventProcessor,
+      {
+        provide: EventProcessor,
+        useFactory: () => new EventProcessor(),
+      },
       // Graph engines
-      LangGraphEngine,
+      {
+        provide: LangGraphEngine,
+        useFactory: (eventProcessor: EventProcessor) =>
+          new LangGraphEngine(eventProcessor, undefined),
+        inject: [EventProcessor],
+      },
       BuilderRegistryService,
       GraphEngineFactory,
       VersionedGraphService,
@@ -271,12 +279,8 @@ export class UniversalGraphModule {
       },
       {
         provide: "GRAPH_ENGINE",
-        useFactory: (factory: GraphEngineFactory) => {
-          return factory.getEngine(
-            options.engineType || GraphEngineType.LANGGRAPH
-          );
-        },
-        inject: [GraphEngineFactory],
+        useFactory: (langGraphEngine: LangGraphEngine) => langGraphEngine,
+        inject: [LangGraphEngine],
       },
       {
         provide: "GRAPH_BUILDERS",

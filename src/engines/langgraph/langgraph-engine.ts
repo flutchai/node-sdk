@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { IGraphEngine } from "../../core";
 import { EventProcessor } from "./event-processor.utils";
 import { ConfigService } from "@nestjs/config";
@@ -13,8 +13,12 @@ export class LangGraphEngine implements IGraphEngine {
 
   constructor(
     private readonly eventProcessor: EventProcessor,
-    private readonly configService: ConfigService
-  ) {}
+    @Optional() private readonly configService?: ConfigService
+  ) {
+    if (!eventProcessor) {
+      this.logger.error("EventProcessor is undefined/null!");
+    }
+  }
 
   /**
    * Method to invoke LangGraph
@@ -160,9 +164,9 @@ export class LangGraphEngine implements IGraphEngine {
   }): Promise<void> {
     try {
       const backendUrl =
-        this.configService.get<string>("API_URL") || "http://amelie-service";
+        this.configService?.get<string>("API_URL") || "http://amelie-service";
       const internalToken =
-        this.configService.get<string>("INTERNAL_API_TOKEN");
+        this.configService?.get<string>("INTERNAL_API_TOKEN");
 
       if (!internalToken) {
         this.logger.warn(
@@ -222,9 +226,9 @@ export class LangGraphEngine implements IGraphEngine {
   }): Promise<void> {
     try {
       const backendUrl =
-        this.configService.get<string>("API_URL") || "http://amelie-service";
+        this.configService?.get<string>("API_URL") || "http://amelie-service";
       const internalToken =
-        this.configService.get<string>("INTERNAL_API_TOKEN");
+        this.configService?.get<string>("INTERNAL_API_TOKEN");
 
       if (!internalToken) {
         this.logger.warn(
