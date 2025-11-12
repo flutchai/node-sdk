@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2025-11-12
+
+### Added
+
+- Implemented manual JSON Schema to Zod conversion for better type safety in MCP tools
+- Added parameter descriptions to tool descriptions as workaround for zodToJsonSchema limitations
+- Added detailed logging for schema conversions and tool execution lifecycle (start, end, error)
+- Added `zod-from-json-schema` dependency for improved schema conversion
+
+### Changed
+
+- Removed string truncation in trace sanitization to preserve full tool inputs/outputs
+- Refactored MCP converter with enhanced schema handling and better error messages
+
+### Removed
+
+- Removed separate metrics webhook - backend now extracts metrics from trace events
+- Removed metrics calculation from EventProcessor (moved to backend)
+
 ## [0.1.8] - 2025-11-11
 
 ### Changed
@@ -123,7 +142,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/flutchai/node-sdk/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/flutchai/node-sdk/compare/v0.1.6...v0.1.8
 [0.1.6]: https://github.com/flutchai/node-sdk/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/flutchai/node-sdk/compare/v0.1.4...v0.1.5
