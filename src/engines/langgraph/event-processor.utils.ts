@@ -259,7 +259,40 @@ export class EventProcessor {
       return;
     }
 
-    // 3. Finalize LLM call: collect metrics from all on_chat_model_end events
+    // 3. Tool events: log tool execution lifecycle
+    if (event.event === "on_tool_start") {
+      this.logger.log("🔧 Tool execution started", {
+        toolName: event.name,
+        input: event.data?.input,
+        runId: event.run_id,
+        metadata: event.metadata,
+      });
+      return;
+    }
+
+    if (event.event === "on_tool_end") {
+      this.logger.log("✅ Tool execution completed", {
+        toolName: event.name,
+        output:
+          typeof event.data?.output === "string"
+            ? event.data.output.substring(0, 200) +
+              (event.data.output.length > 200 ? "..." : "")
+            : event.data?.output,
+        runId: event.run_id,
+      });
+      return;
+    }
+
+    if (event.event === "on_tool_error") {
+      this.logger.error("❌ Tool execution failed", {
+        toolName: event.name,
+        error: event.data?.error,
+        runId: event.run_id,
+      });
+      return;
+    }
+
+    // 4. Finalize LLM call: collect metrics from all on_chat_model_end events
     if (event.event === "on_chat_model_end") {
       // Extract usage metrics from the event
       const output = event.data?.output;
@@ -435,22 +468,10 @@ export class EventProcessor {
   /**
    * Build final result from accumulator
    * Uses generation if available, otherwise falls back to streamed text
-   * Returns content and metrics separately (metrics should NOT be stored in message.metadata)
+   * Returns content and trace events (metrics should be extracted from trace on backend)
    */
   getResult(acc: StreamAccumulator): {
     content: IStoredMessageContent;
-    metrics: {
-      modelCalls: Array<{
-        nodeName: string;
-        timestamp: number;
-        modelId: string;
-        promptTokens: number;
-        completionTokens: number;
-        totalTokens: number;
-        latencyMs: number;
-      }>;
-      apiCalls: any[];
-    } | null;
     trace: {
       events: IGraphTraceEvent[];
       startedAt: number;
@@ -460,44 +481,6 @@ export class EventProcessor {
       totalModelCalls: number;
     } | null;
   } {
-    // Calculate total metrics from all LLM calls
-    const totalPromptTokens = acc.llmCalls.reduce(
-      (sum, call) => sum + call.promptTokens,
-      0
-    );
-    const totalCompletionTokens = acc.llmCalls.reduce(
-      (sum, call) => sum + call.completionTokens,
-      0
-    );
-    const totalTokens = acc.llmCalls.reduce(
-      (sum, call) => sum + call.totalTokens,
-      0
-    );
-
-    this.logger.log("📊 Final metrics collected", {
-      llmCallsCount: acc.llmCalls.length,
-      totalPromptTokens,
-      totalCompletionTokens,
-      totalTokens,
-      modelIds: acc.llmCalls.map(c => c.modelId),
-    });
-
-    const metrics =
-      acc.llmCalls.length > 0
-        ? {
-            modelCalls: acc.llmCalls.map(call => ({
-              nodeName: call.nodeName || "unknown",
-              timestamp: call.timestamp,
-              modelId: call.modelId,
-              promptTokens: call.promptTokens,
-              completionTokens: call.completionTokens,
-              totalTokens: call.totalTokens,
-              latencyMs: 0, // Not calculated from events
-            })),
-            apiCalls: [], // TODO: Add API calls tracking (rerank, embeddings) via custom events
-          }
-        : null;
-
     const startedAt = acc.traceStartedAt ?? Date.now();
     const completedAt = acc.traceCompletedAt ?? startedAt;
     const trace =
@@ -534,7 +517,6 @@ export class EventProcessor {
         reasoningChains:
           acc.reasoningChains.length > 0 ? acc.reasoningChains : undefined,
       },
-      metrics,
       trace,
     };
   }

@@ -126,9 +126,8 @@ export function sanitizeTraceData(
   }
 
   if (typeof value === "string") {
-    return value.length > opts.maxStringLength
-      ? `${value.slice(0, opts.maxStringLength)}…`
-      : value;
+    // No truncation - we need full tool inputs/outputs for proper processing
+    return value;
   }
 
   if (typeof value === "number" || typeof value === "boolean") {

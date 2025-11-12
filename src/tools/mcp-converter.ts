@@ -26,68 +26,79 @@ export class McpConverter {
 
   constructor(mcpRuntimeUrl: string = "http://localhost:3004") {
     this.mcpRuntimeUrl = mcpRuntimeUrl;
+    this.logger.log(
+      `🔧 McpConverter initialized with SDK version 0.1.8 (manual jsonSchemaToZod)`
+    );
   }
 
   /**
-   * Convert JSON Schema to simplified Zod schema for LangChain
+   * Convert JSON Schema to Zod schema manually
+   * This creates a standard Zod schema that zodToJsonSchema can convert back properly
    */
   private jsonSchemaToZod(jsonSchema: any): z.ZodTypeAny {
     if (!jsonSchema || typeof jsonSchema !== "object") {
       return z.any();
     }
 
-    if (jsonSchema.type !== "object") {
-      return this.mapPrimitiveSchema(jsonSchema.type, true);
-    }
+    try {
+      // Handle object type with properties
+      if (jsonSchema.type === "object" && jsonSchema.properties) {
+        const shape: Record<string, z.ZodTypeAny> = {};
 
-    const properties = jsonSchema.properties || {};
-    const required = Array.isArray(jsonSchema.required)
-      ? jsonSchema.required
-      : [];
+        for (const [key, propSchema] of Object.entries(jsonSchema.properties)) {
+          const prop = propSchema as any;
+          let zodProp: z.ZodTypeAny;
 
-    const zodShape: Record<string, z.ZodTypeAny> = {};
+          // Convert property based on type
+          switch (prop.type) {
+            case "string":
+              zodProp = z.string();
+              break;
+            case "number":
+              zodProp = z.number();
+              break;
+            case "boolean":
+              zodProp = z.boolean();
+              break;
+            case "integer":
+              zodProp = z.number().int();
+              break;
+            case "array":
+              zodProp = z.array(z.any());
+              break;
+            case "object":
+              zodProp = z.record(z.any());
+              break;
+            default:
+              zodProp = z.any();
+          }
 
-    for (const [key, prop] of Object.entries(properties)) {
-      const propDef = prop as Record<string, any> | undefined;
-      const isRequired = required.includes(key);
-      const schemaType = propDef?.type ?? "any";
-      const mappedType = this.mapPrimitiveSchema(schemaType, isRequired);
+          // Add description if present
+          if (prop.description) {
+            zodProp = zodProp.describe(prop.description);
+          }
 
-      zodShape[key] = mappedType;
-    }
+          // Make optional if not in required array
+          if (!jsonSchema.required?.includes(key)) {
+            zodProp = zodProp.optional();
+          }
 
-    const baseObject = z.object(zodShape);
+          shape[key] = zodProp;
+        }
 
-    const configuredObject =
-      jsonSchema.additionalProperties === false
-        ? baseObject.strict()
-        : baseObject.passthrough();
+        return z.object(shape);
+      }
 
-    return configuredObject as z.ZodTypeAny;
-  }
-
-  private mapPrimitiveSchema(
-    type: string | undefined,
-    required: boolean
-  ): z.ZodTypeAny {
-    const optionalize = <T extends z.ZodTypeAny>(
-      schema: T
-    ): T | z.ZodOptional<T> => (required ? schema : schema.optional());
-
-    switch (type) {
-      case "string":
-        return optionalize(z.string());
-      case "number":
-      case "integer":
-        return optionalize(z.number());
-      case "boolean":
-        return optionalize(z.boolean());
-      case "array":
-        return optionalize(z.array(z.any()));
-      case "object":
-        return optionalize(z.record(z.any()));
-      default:
-        return optionalize(z.any());
+      // Fallback to z.any() for other types
+      this.logger.warn(
+        `Unsupported JSON Schema structure, falling back to z.any()`
+      );
+      return z.any();
+    } catch (error) {
+      this.logger.warn(
+        `Failed to convert JSON Schema, falling back to z.any(): ${error}`
+      );
+      return z.any();
     }
   }
 
@@ -97,6 +108,29 @@ export class McpConverter {
   convertTool(mcpTool: McpTool): LangChainStructuredTool {
     const logger = this.logger;
     const mcpRuntimeUrl = this.mcpRuntimeUrl;
+
+    // Enhance tool description with parameter descriptions
+    // This is a workaround because zodToJsonSchema doesn't preserve .describe() properly
+    let enhancedDescription = mcpTool.description;
+
+    if (mcpTool.inputSchema?.properties) {
+      const paramDescriptions: string[] = [];
+      for (const [key, propSchema] of Object.entries(
+        mcpTool.inputSchema.properties
+      )) {
+        const prop = propSchema as any;
+        if (prop.description) {
+          const isRequired = mcpTool.inputSchema.required?.includes(key);
+          paramDescriptions.push(
+            `- ${key}${isRequired ? " (required)" : ""}: ${prop.description}`
+          );
+        }
+      }
+
+      if (paramDescriptions.length > 0) {
+        enhancedDescription = `${mcpTool.description}\n\nParameters:\n${paramDescriptions.join("\n")}`;
+      }
+    }
 
     const schema = this.jsonSchemaToZod(mcpTool.inputSchema);
 
@@ -108,6 +142,52 @@ export class McpConverter {
       `🔧 [${mcpTool.name}] Using schema type: ${(schema as any)?._def?.typeName ?? "unknown"}`
     );
 
+    // Log converted Zod schema details to verify descriptions are preserved
+    if (
+      (schema as any)?._def?.shape &&
+      typeof (schema as any)._def.shape === "function"
+    ) {
+      try {
+        const shape = (schema as any)._def.shape();
+        logger.debug(
+          `🔧 [${mcpTool.name}] Converted Zod schema shape:`,
+          JSON.stringify(
+            Object.entries(shape).reduce(
+              (acc, [key, val]: [string, any]) => {
+                acc[key] = {
+                  type: val?._def?.typeName,
+                  description: val?._def?.description,
+                  optional: val?._def?.typeName === "ZodOptional",
+                };
+                return acc;
+              },
+              {} as Record<string, any>
+            ),
+            null,
+            2
+          )
+        );
+      } catch (error) {
+        logger.debug(
+          `🔧 [${mcpTool.name}] Could not extract Zod schema shape: ${error}`
+        );
+      }
+    }
+
+    // CRITICAL CHECK: Convert Zod back to JSON Schema to see what LangChain will send to LLM
+    try {
+      const { zodToJsonSchema } = require("zod-to-json-schema");
+      const convertedJsonSchema = zodToJsonSchema(schema);
+      logger.warn(
+        `🔧 [${mcpTool.name}] JSON Schema that LangChain will use:`,
+        JSON.stringify(convertedJsonSchema, null, 2)
+      );
+    } catch (error) {
+      logger.warn(
+        `🔧 [${mcpTool.name}] Could not convert Zod to JSON Schema: ${error}`
+      );
+    }
+
     return new DynamicStructuredTool<
       z.ZodTypeAny,
       Record<string, any>,
@@ -115,7 +195,7 @@ export class McpConverter {
       string
     >({
       name: mcpTool.name,
-      description: mcpTool.description,
+      description: enhancedDescription,
       schema,
       func: async (input: Record<string, any>): Promise<string> => {
         logger.log(`🔧 [${mcpTool.name}] LLM INPUT: ${JSON.stringify(input)}`);

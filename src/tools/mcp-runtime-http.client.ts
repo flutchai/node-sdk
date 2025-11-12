@@ -5,6 +5,11 @@ import {
   ToolExecutionResult,
   McpRuntimeClient,
 } from "./mcp.interfaces";
+import {
+  CallbackManager,
+  parseCallbackConfigArg,
+} from "@langchain/core/callbacks/manager";
+import { RunnableConfig } from "@langchain/core/runnables";
 
 /**
  * HTTP client implementation for MCP Runtime
@@ -115,6 +120,83 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
     } catch (error) {
       this.logger.warn("MCP Runtime health check failed:", error.message);
       return false;
+    }
+  }
+
+  /**
+   * Execute tool with LangChain event emission
+   * @param toolCallId - Tool call ID from LLM
+   * @param toolName - Tool name
+   * @param enrichedArgs - Merged arguments (toolConfig + LLM args)
+   * @param executionContext - Execution context (userId, agentId, etc.)
+   * @param config - RunnableConfig with callbacks
+   * @returns Tool execution result with content
+   */
+  async executeToolWithEvents(
+    toolCallId: string,
+    toolName: string,
+    enrichedArgs: Record<string, any>,
+    executionContext: Record<string, any>,
+    config?: RunnableConfig
+  ): Promise<{ content: string; success: boolean }> {
+    // Parse callback configuration
+    const parsedConfig = parseCallbackConfigArg(config);
+    const callbackManager = CallbackManager.configure(parsedConfig.callbacks);
+
+    let runManager;
+
+    try {
+      // Emit on_tool_start event
+      runManager = await callbackManager?.handleToolStart(
+        {
+          name: toolName,
+          lc: 1,
+          type: "not_implemented",
+          id: ["langchain", "tools", "mcp", toolName],
+        },
+        JSON.stringify(enrichedArgs),
+        parsedConfig.runId,
+        undefined,
+        parsedConfig.tags,
+        parsedConfig.metadata,
+        toolName
+      );
+
+      // Execute tool
+      const result = await this.executeTool(
+        toolName,
+        enrichedArgs,
+        executionContext
+      );
+
+      // Create content
+      const content = result.success
+        ? JSON.stringify(result)
+        : result.error || JSON.stringify(result);
+
+      // Emit on_tool_end event
+      await runManager?.handleToolEnd(content);
+
+      return {
+        content,
+        success: result.success,
+      };
+    } catch (error) {
+      this.logger.error(`Error executing tool ${toolName}:`, error);
+
+      // Emit on_tool_error event
+      await runManager?.handleToolError(error);
+
+      // Return error result
+      const errorContent = JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : "Tool execution failed",
+      });
+
+      return {
+        content: errorContent,
+        success: false,
+      };
     }
   }
 }

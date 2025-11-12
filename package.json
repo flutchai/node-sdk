@@ -116,7 +116,8 @@
     "prom-client": "^14.0.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "zod-from-json-schema": "^0.5.1"
   },
   "devDependencies": {
     "@jest/globals": "^29.0.0",
