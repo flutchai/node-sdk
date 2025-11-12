@@ -71,40 +71,18 @@ export class LangGraphEngine implements IGraphEngine {
       }
 
       // Get final result from accumulator
-      const { content, metrics, trace } = this.eventProcessor.getResult(acc);
+      const { content, trace } = this.eventProcessor.getResult(acc);
 
       this.logger.debug("[STREAM-RESULT] Got result from EventProcessor", {
         hasContent: !!content,
-        hasMetrics: !!metrics,
-        modelCallsCount: metrics?.modelCalls?.length || 0,
-        apiCallsCount: metrics?.apiCalls?.length || 0,
         hasContext: !!config.configurable?.context,
         hasTrace: !!trace,
         traceEvents: trace?.events?.length || 0,
+        totalModelCalls: trace?.totalModelCalls || 0,
       });
 
-      // Send metrics webhook if we have metrics with data and context
-      if (
-        metrics &&
-        metrics.modelCalls?.length > 0 &&
-        config.configurable?.context
-      ) {
-        const context = config.configurable.context;
-        await this.sendMetricsWebhook({
-          messageId: context.messageId || "unknown",
-          threadId: context.threadId || "unknown",
-          userId: context.userId || "unknown",
-          agentId: context.agentId || "unknown",
-          companyId: context.companyId || "unknown",
-          metrics,
-        });
-      } else {
-        this.logger.debug("[METRICS-WEBHOOK] Skipping webhook", {
-          hasMetrics: !!metrics,
-          modelCallsCount: metrics?.modelCalls?.length || 0,
-          hasContext: !!config.configurable?.context,
-        });
-      }
+      // NOTE: Metrics are NO LONGER sent separately via webhook
+      // Backend will extract metrics from trace events in UsageTrackerService
 
       if (trace && trace.events.length > 0 && config.configurable?.context) {
         const context = config.configurable.context;
