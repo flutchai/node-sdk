@@ -190,8 +190,7 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
       // Return error result
       const errorContent = JSON.stringify({
         success: false,
-        error:
-          error instanceof Error ? error.message : "Tool execution failed",
+        error: error instanceof Error ? error.message : "Tool execution failed",
       });
 
       return {

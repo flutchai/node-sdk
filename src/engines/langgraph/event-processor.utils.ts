@@ -273,9 +273,11 @@ export class EventProcessor {
     if (event.event === "on_tool_end") {
       this.logger.log("✅ Tool execution completed", {
         toolName: event.name,
-        output: typeof event.data?.output === "string"
-          ? event.data.output.substring(0, 200) + (event.data.output.length > 200 ? "..." : "")
-          : event.data?.output,
+        output:
+          typeof event.data?.output === "string"
+            ? event.data.output.substring(0, 200) +
+              (event.data.output.length > 200 ? "..." : "")
+            : event.data?.output,
         runId: event.run_id,
       });
       return;
