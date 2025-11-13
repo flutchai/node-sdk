@@ -78,7 +78,6 @@ export class LangGraphEngine implements IGraphEngine {
         hasContext: !!config.configurable?.context,
         hasTrace: !!trace,
         traceEvents: trace?.events?.length || 0,
-        totalModelCalls: trace?.totalModelCalls || 0,
       });
 
       // NOTE: Metrics are NO LONGER sent separately via webhook
@@ -103,7 +102,6 @@ export class LangGraphEngine implements IGraphEngine {
           companyId: context.companyId || "unknown",
           events: trace.events,
           totalEvents: trace.totalEvents,
-          totalModelCalls: trace.totalModelCalls,
           startedAt: trace.startedAt,
           completedAt: trace.completedAt,
           durationMs: trace.durationMs,
@@ -197,7 +195,6 @@ export class LangGraphEngine implements IGraphEngine {
     companyId: string;
     events: any[];
     totalEvents: number;
-    totalModelCalls: number;
     startedAt: number;
     completedAt: number;
     durationMs: number;
@@ -225,7 +222,6 @@ export class LangGraphEngine implements IGraphEngine {
         agentId: payload.agentId,
         companyId: payload.companyId,
         totalEvents: payload.totalEvents,
-        totalModelCalls: payload.totalModelCalls,
         startedAt: payload.startedAt,
         completedAt: payload.completedAt,
         durationMs: payload.durationMs,

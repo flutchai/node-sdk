@@ -1,22 +1,28 @@
 /**
- * Reasoning chain types
+ * Content block types (unified for all channels)
  */
 
-/** Reasoning step in a chain */
-export interface IReasoningStep {
+/** Content block - can be text or tool_use */
+export interface IContentBlock {
   index: number;
   type: "text" | "tool_use";
+  // For type="text"
   text?: string;
   metadata?: Record<string, any>;
-  // Fields for tool_use type
-  name?: string;
-  id?: string;
-  input?: string;
-  output?: string;
+  // For type="tool_use"
+  name?: string;   // Tool name
+  id?: string;     // Tool ID
+  input?: string;  // Tool parameters (IN) - what we passed to the tool
+  output?: string; // Tool result (OUT) - what the tool returned
 }
 
-/** Chain of reasoning steps */
-export interface IReasoningChain {
-  steps: IReasoningStep[];
+/** Chain of content blocks */
+export interface IContentChain {
+  channel: string; // "text" | "processing"
+  steps: IContentBlock[];
   isComplete: boolean;
 }
+
+// Legacy aliases for backward compatibility
+export type IReasoningStep = IContentBlock;
+export type IReasoningChain = IContentChain;
