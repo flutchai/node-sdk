@@ -3,16 +3,18 @@
  */
 
 import { IAttachment } from "./attachments";
-import { IReasoningChain } from "./reasoning";
+import { IContentChain } from "./reasoning";
 import { ITracingEvent, IToolCall } from "./tracing";
 
 /** Stored message content */
 export interface IStoredMessageContent {
-  text?: string;
+  contentChains?: IContentChain[]; // Unified structured content from all channels (TEXT, PROCESSING)
   attachments?: IAttachment[];
   metadata?: Record<string, any>;
   tracingEvents?: ITracingEvent[];
-  reasoningChains?: IReasoningChain[];
+  currentToolCall?: IToolCall | null; // Current tool call (TEXT channel, streaming only - transient)
+  // Legacy fields (deprecated, will be removed)
+  text?: string;
+  reasoningChains?: IContentChain[];
   hasReasoningProcess?: boolean;
-  currentToolCall?: IToolCall | null;
 }

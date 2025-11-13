@@ -3,10 +3,11 @@
  */
 
 import {
-  IReasoningStep,
-  IReasoningChain,
+  IContentBlock,
+  IContentChain,
   StreamChannel,
   IStoredMessageContent,
+  IAttachment,
 } from "../../messages";
 import { IGraphTraceEvent } from "../../graph/tracing";
 import { Injectable, Logger } from "@nestjs/common";
@@ -29,16 +30,15 @@ export interface LLMCallRecord {
  * Each stream creates its own accumulator to ensure thread-safety
  */
 export interface StreamAccumulator {
-  streamedText: string; // Accumulated text from TEXT channel (for fallback)
-  reasoningChains: IReasoningChain[]; // All reasoning chains from PROCESSING channel
-  generation: IStoredMessageContent | null; // Final generation from on_chain_end
+  contentChains: IContentChain[]; // All completed chains from both TEXT and PROCESSING channels
+  currentSteps: Map<StreamChannel, IContentBlock[]>; // Accumulating steps per channel
+  currentToolIndex: Map<StreamChannel, number | null>; // Track current tool by index (for input_json_delta)
+  finalAttachments: IAttachment[]; // Attachments from on_chain_end
+  finalMetadata: Record<string, any>; // Metadata from on_chain_end
   llmCalls: LLMCallRecord[]; // Collected LLM metrics from on_chat_model_end events
   traceEvents: IGraphTraceEvent[];
   traceStartedAt: number | null;
   traceCompletedAt: number | null;
-  // Real-time reasoning step accumulator for streaming
-  currentReasoningSteps: IReasoningStep[]; // Current reasoning steps being accumulated
-  currentToolUse: IReasoningStep | null; // Current tool_use being built from input_json_delta events
 }
 
 /**
@@ -54,15 +54,21 @@ export class EventProcessor {
    */
   createAccumulator(): StreamAccumulator {
     return {
-      streamedText: "",
-      reasoningChains: [],
-      generation: null,
+      contentChains: [],
+      currentSteps: new Map([
+        [StreamChannel.TEXT, []],
+        [StreamChannel.PROCESSING, []],
+      ]),
+      currentToolIndex: new Map([
+        [StreamChannel.TEXT, null],
+        [StreamChannel.PROCESSING, null],
+      ]),
+      finalAttachments: [],
+      finalMetadata: {},
       llmCalls: [],
       traceEvents: [],
       traceStartedAt: null,
       traceCompletedAt: null,
-      currentReasoningSteps: [],
-      currentToolUse: null,
     };
   }
 
@@ -99,61 +105,6 @@ export class EventProcessor {
     return [];
   }
 
-  /**
-   * Groups tool_use and input_json_delta into proper structure
-   * tool_use.input → output (tool execution result)
-   * input_json_delta.input → output (tool execution result, accumulated)
-   */
-  private mapReasoningSteps(rawSteps: any[]): IReasoningStep[] {
-    const steps: IReasoningStep[] = [];
-    let currentToolUse: IReasoningStep | null = null;
-
-    for (const raw of rawSteps) {
-      if (raw.type === "tool_use" || raw.type === "tool_call") {
-        // Save previous tool_use if exists
-        if (currentToolUse) {
-          steps.push(currentToolUse);
-        }
-
-        // Create new tool_use
-        // tool_use.input contains tool execution result (OUT)
-        currentToolUse = {
-          index: raw.index || 0,
-          type: "tool_use",
-          name: raw.name,
-          id: raw.id,
-          input: "", // Parameters (IN) - filled separately or empty
-          output: raw.input || "", // Result (OUT) - comes in tool_use.input
-        };
-      } else if (raw.type === "input_json_delta") {
-        // input_json_delta.input contains execution result (streaming) → output
-        if (currentToolUse) {
-          currentToolUse.output =
-            (currentToolUse.output || "") + (raw.input || "");
-        }
-      } else {
-        // Regular step (text, thinking, tool_result)
-        if (currentToolUse) {
-          steps.push(currentToolUse);
-          currentToolUse = null;
-        }
-
-        steps.push({
-          index: raw.index || 0,
-          type: raw.type,
-          text: raw.text || "",
-          metadata: raw.metadata,
-        });
-      }
-    }
-
-    // Don't forget the last tool_use
-    if (currentToolUse) {
-      steps.push(currentToolUse);
-    }
-
-    return steps;
-  }
 
   /**
    * Process a LangGraph stream event
@@ -167,91 +118,83 @@ export class EventProcessor {
   ): void {
     this.captureTraceEvent(acc, event);
 
-    // 1. Streaming TEXT channel: normalize and send all content blocks to UI
-    if (
-      event.event === "on_chat_model_stream" &&
-      event.metadata?.stream_channel === StreamChannel.TEXT &&
-      event.data?.chunk?.content
-    ) {
+    // Determine channel (default to TEXT if undefined)
+    const channel = (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
+
+    // 1. Streaming: accumulate content blocks (universal for both channels)
+    if (event.event === "on_chat_model_stream" && event.data?.chunk?.content) {
       const chunk = event.data.chunk.content;
-
-      // Normalize content to array of blocks for unified frontend handling
       const blocks = this.normalizeContentBlocks(chunk);
+      const steps = acc.currentSteps.get(channel)!;
 
-      // Send all blocks to UI (tool_use, input_json_delta, text)
-      if (blocks.length > 0 && onPartial) {
-        onPartial(JSON.stringify({ text: blocks }));
-      }
-
-      // Accumulate only text blocks for fallback
-      const textOnly = blocks
-        .filter((block: any) => block?.type === "text")
-        .map((block: any) => block.text || "")
-        .join("");
-
-      if (textOnly) {
-        acc.streamedText += textOnly;
-      }
-
-      return;
-    }
-
-    // 2. Streaming PROCESSING channel: send delta events
-    if (
-      event.event === "on_chat_model_stream" &&
-      event.metadata?.stream_channel === StreamChannel.PROCESSING &&
-      event.data?.chunk?.content
-    ) {
-      const chunk = event.data.chunk.content;
-
-      // Normalize content to array of blocks
-      const blocks = this.normalizeContentBlocks(chunk);
-
-      // Process each block and send delta updates
       for (const block of blocks) {
         if (block.type === "tool_use" || block.type === "tool_call") {
-          // Save previous tool_use if exists
-          if (acc.currentToolUse) {
-            acc.currentReasoningSteps.push(acc.currentToolUse);
-          }
-
-          // Create new tool_use
-          acc.currentToolUse = {
-            index: acc.currentReasoningSteps.length,
+          // Create new tool and add to steps immediately
+          const newTool: IContentBlock = {
+            index: block.index ?? steps.length,
             type: "tool_use",
             name: block.name,
             id: block.id,
             input: block.input || "",
-            output: "",
+            output: "", // Will accumulate via index lookup
           };
+          steps.push(newTool);
 
-          // Send step_started event
+          // Remember index for subsequent deltas
+          acc.currentToolIndex.set(channel, newTool.index);
+
+          // Send to UI (different format per channel)
           if (onPartial) {
-            onPartial(
-              JSON.stringify({
-                processing_delta: {
-                  type: "step_started",
-                  step: acc.currentToolUse,
-                },
-              })
-            );
+            if (channel === StreamChannel.PROCESSING) {
+              onPartial(
+                JSON.stringify({
+                  processing_delta: { type: "step_started", step: newTool },
+                })
+              );
+            } else {
+              onPartial(JSON.stringify({ text: [block] }));
+            }
           }
         } else if (block.type === "input_json_delta") {
-          // Accumulate output and send chunk
-          if (acc.currentToolUse && onPartial) {
-            const chunk = block.input || "";
-            acc.currentToolUse.output += chunk;
+          // Find current tool by index and accumulate output
+          const toolIndex = acc.currentToolIndex.get(channel);
+          if (toolIndex !== null) {
+            const tool = steps.find((s) => s.index === toolIndex);
+            if (tool) {
+              const deltaChunk = block.input || "";
+              tool.output += deltaChunk;
 
-            // Send output_chunk event
-            onPartial(
-              JSON.stringify({
-                processing_delta: {
-                  type: "output_chunk",
-                  stepId: acc.currentToolUse.id,
-                  chunk: chunk,
-                },
-              })
-            );
+              if (onPartial) {
+                if (channel === StreamChannel.PROCESSING) {
+                  onPartial(
+                    JSON.stringify({
+                      processing_delta: {
+                        type: "output_chunk",
+                        stepId: tool.id,
+                        chunk: deltaChunk,
+                      },
+                    })
+                  );
+                } else {
+                  onPartial(JSON.stringify({ text: [block] }));
+                }
+              }
+            }
+          }
+        } else if (block.type === "text") {
+          // Text block means tool is complete (if any)
+          acc.currentToolIndex.set(channel, null);
+
+          // Add text block
+          steps.push({
+            index: steps.length,
+            type: "text",
+            text: block.text || "",
+          });
+
+          // Send to UI (TEXT channel only)
+          if (onPartial && channel === StreamChannel.TEXT) {
+            onPartial(JSON.stringify({ text: [block] }));
           }
         }
       }
@@ -292,10 +235,36 @@ export class EventProcessor {
       return;
     }
 
-    // 4. Finalize LLM call: collect metrics from all on_chat_model_end events
+    // 3. Model end: finalize content chain (universal for both channels)
     if (event.event === "on_chat_model_end") {
-      // Extract usage metrics from the event
       const output = event.data?.output;
+      const steps = acc.currentSteps.get(channel)!;
+
+      // Clear tool index (tool already in steps)
+      acc.currentToolIndex.set(channel, null);
+
+      // Save completed chain if has content
+      if (steps.length > 0) {
+        acc.contentChains.push({
+          channel,
+          steps: [...steps],
+          isComplete: true,
+        });
+
+        // Send completion event for PROCESSING channel
+        if (channel === StreamChannel.PROCESSING && onPartial) {
+          onPartial(
+            JSON.stringify({
+              processing_delta: { type: "chain_completed" },
+            })
+          );
+        }
+
+        // Reset for next chain
+        acc.currentSteps.set(channel, []);
+      }
+
+      // Collect LLM metrics
       const usageMetadata = output?.usage_metadata || output?.usageMetadata;
       const modelId = event.metadata?.modelId;
 
@@ -317,158 +286,39 @@ export class EventProcessor {
           nodeName: llmCall.nodeName,
           totalRecorded: acc.llmCalls.length,
         });
-      } else {
-        this.logger.warn(
-          "⚠️ Missing usage metadata or modelId in on_chat_model_end",
-          {
-            hasUsageMetadata: !!usageMetadata,
-            hasModelId: !!modelId,
-            eventName: event.name,
-            metadataKeys: event.metadata ? Object.keys(event.metadata) : [],
-            outputKeys: output ? Object.keys(output) : [],
-          }
-        );
       }
 
-      // Finalize reasoning chain from PROCESSING channel
-      if (event.metadata?.stream_channel === StreamChannel.PROCESSING) {
-        // Finalize any pending tool_use
-        if (acc.currentToolUse) {
-          acc.currentReasoningSteps.push(acc.currentToolUse);
-          acc.currentToolUse = null;
-        }
-
-        // Save completed chain
-        if (acc.currentReasoningSteps.length > 0) {
-          acc.reasoningChains.push({
-            steps: acc.currentReasoningSteps,
-            isComplete: true,
-          });
-
-          // Send chain_completed event
-          if (onPartial) {
-            onPartial(
-              JSON.stringify({
-                processing_delta: {
-                  type: "chain_completed",
-                },
-              })
-            );
-          }
-
-          // Reset for next chain
-          acc.currentReasoningSteps = [];
-        } else {
-          // Fallback: parse from output if streaming didn't accumulate steps
-          const stepsRaw =
-            output?.content || // AIMessageChunk object (direct)
-            output?.kwargs?.content || // Serialized LangChain format
-            event.data?.chunk?.content || // Older version
-            [];
-
-          let steps: IReasoningStep[];
-
-          // Normalize to array of IReasoningStep
-          if (Array.isArray(stepsRaw)) {
-            // Map tool_use and input_json_delta to proper structure
-            steps = this.mapReasoningSteps(stepsRaw);
-          } else if (
-            typeof stepsRaw === "string" &&
-            stepsRaw.trim().length > 0
-          ) {
-            // Convert string to single text step
-            // This happens when LLM returns reasoning as plain text instead of structured steps
-            steps = [
-              {
-                index: 0,
-                type: "text",
-                text: stepsRaw.trim(),
-              },
-            ];
-          } else {
-            // Empty or invalid - skip
-            steps = [];
-          }
-
-          if (steps.length > 0) {
-            acc.reasoningChains.push({
-              steps,
-              isComplete: true,
-            });
-
-            // Send chain_completed event
-            if (onPartial) {
-              onPartial(
-                JSON.stringify({
-                  processing_delta: {
-                    type: "chain_completed",
-                  },
-                })
-              );
-            }
-          }
-        }
-      }
       return;
     }
 
-    // 4. Finalize TEXT: save generation object (final result)
-    if (
-      event.event === "on_chain_end" &&
-      event.metadata?.stream_channel === StreamChannel.TEXT
-    ) {
-      const output = event.data.output;
+    // 4. Chain end: extract attachments and metadata (TEXT channel only)
+    if (event.event === "on_chain_end") {
+      const isTextChannel =
+        channel === StreamChannel.TEXT || !event.metadata?.stream_channel;
 
-      // Normalize different graph output formats to standard IStoredMessageContent:
-      // - React graph: { answer: { text } }
-      // - RAG graph: { generation: { text, attachments } }
-      // - Simple graph: { generation: AIMessage }
-      // - Direct: { text, attachments, metadata }
-      let generation: IStoredMessageContent | null = null;
+      if (isTextChannel) {
+        const output = event.data.output;
 
-      if (output?.answer?.text) {
-        // React graph format
-        generation = {
-          text: output.answer.text,
-          attachments: output.answer.attachments || [],
-          metadata: output.answer.metadata || {},
-        };
-      } else if (output?.generation?.text) {
-        // RAG graph format
-        generation = {
-          text: output.generation.text,
-          attachments: output.generation.attachments || [],
-          metadata: output.generation.metadata || {},
-        };
-      } else if (output?.generation?.content) {
-        // Simple graph format (AIMessage object)
-        generation = {
-          text: output.generation.content,
-          attachments: [],
-          metadata: {},
-        };
-      } else if (output?.text) {
-        // Direct format
-        generation = {
-          text: output.text,
-          attachments: output.attachments || [],
-          metadata: output.metadata || {},
-        };
+        // Extract from different graph output formats
+        if (output?.answer) {
+          acc.finalAttachments = output.answer.attachments || [];
+          acc.finalMetadata = output.answer.metadata || {};
+        } else if (output?.generation) {
+          acc.finalAttachments = output.generation.attachments || [];
+          acc.finalMetadata = output.generation.metadata || {};
+        } else if (output?.text) {
+          acc.finalAttachments = output.attachments || [];
+          acc.finalMetadata = output.metadata || {};
+        }
       }
 
-      // DON'T send full text via onPartial here - it was already streamed via on_chat_model_stream
-      // This generation object is only used as fallback if streaming didn't work
-      // Sending it here causes duplicate full-text events on the frontend
-
-      acc.generation = generation;
       return;
     }
   }
 
   /**
    * Build final result from accumulator
-   * Uses generation if available, otherwise falls back to streamed text
-   * Returns content and trace events (metrics should be extracted from trace on backend)
+   * Returns unified content chains with attachments and metadata
    */
   getResult(acc: StreamAccumulator): {
     content: IStoredMessageContent;
@@ -480,9 +330,13 @@ export class EventProcessor {
       totalEvents: number;
       totalModelCalls: number;
     } | null;
+    metrics: {
+      modelCalls: LLMCallRecord[];
+    } | null;
   } {
     const startedAt = acc.traceStartedAt ?? Date.now();
     const completedAt = acc.traceCompletedAt ?? startedAt;
+
     const trace =
       acc.traceEvents.length > 0
         ? {
@@ -495,29 +349,34 @@ export class EventProcessor {
           }
         : null;
 
+    const metrics =
+      acc.llmCalls.length > 0
+        ? {
+            modelCalls: acc.llmCalls,
+          }
+        : null;
+
     if (trace) {
       this.logger.log("📊 [EventProcessor] Final trace assembled", {
         totalEvents: trace.totalEvents,
-        eventsArrayLength: trace.events.length,
-        firstEventType: trace.events[0]?.type,
-        lastEventType: trace.events[trace.events.length - 1]?.type,
-        firstEventSample: trace.events[0]
-          ? JSON.stringify(trace.events[0]).substring(0, 150)
-          : null,
-        allEventsNull: trace.events.every(e => e === null),
-        someEventsNull: trace.events.some(e => e === null),
+        contentChainsCount: acc.contentChains.length,
+        textChains: acc.contentChains.filter((c) => c.channel === "text")
+          .length,
+        processingChains: acc.contentChains.filter(
+          (c) => c.channel === "processing"
+        ).length,
       });
     }
 
     return {
       content: {
-        text: acc.generation?.text || acc.streamedText || "",
-        attachments: acc.generation?.attachments || [],
-        metadata: acc.generation?.metadata || {},
-        reasoningChains:
-          acc.reasoningChains.length > 0 ? acc.reasoningChains : undefined,
+        contentChains:
+          acc.contentChains.length > 0 ? acc.contentChains : undefined,
+        attachments: acc.finalAttachments,
+        metadata: acc.finalMetadata,
       },
       trace,
+      metrics,
     };
   }
 
