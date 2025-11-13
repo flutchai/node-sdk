@@ -163,16 +163,16 @@ export class EventProcessor {
           onPartial
         );
       } else if (block.type === "input_json_delta") {
-        // Accumulate tool output
+        // Accumulate tool INPUT (parameters)
         if (state.currentBlock && state.currentBlock.type === "tool_use") {
           const chunk = block.input || "";
-          state.currentBlock.output += chunk;
+          state.currentBlock.input += chunk;
 
           // Send delta
           this.sendDelta(
             channel,
             {
-              type: "output_chunk",
+              type: "tool_input_chunk",
               stepId: state.currentBlock.id,
               chunk: chunk,
             },
@@ -303,15 +303,35 @@ export class EventProcessor {
     }
 
     if (event.event === "on_tool_end") {
-      this.logger.log("✅ Tool execution completed", {
-        toolName: event.name,
-        output:
-          typeof event.data?.output === "string"
-            ? event.data.output.substring(0, 200) +
-              (event.data.output.length > 200 ? "..." : "")
-            : event.data?.output,
-        runId: event.run_id,
-      });
+      const channel = (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
+      const state = acc.channels.get(channel);
+
+      if (state?.currentBlock && state.currentBlock.type === "tool_use") {
+        // Set tool OUTPUT (result of execution)
+        const output = event.data?.output;
+        const outputString = typeof output === "string"
+          ? output
+          : JSON.stringify(output, null, 2);
+
+        state.currentBlock.output = outputString;
+
+        // Send delta with tool output
+        this.sendDelta(
+          channel,
+          {
+            type: "tool_output_chunk",
+            stepId: state.currentBlock.id,
+            chunk: outputString,
+          },
+          onPartial
+        );
+
+        this.logger.log("✅ Tool execution completed", {
+          toolName: event.name,
+          outputPreview: outputString.substring(0, 200) + (outputString.length > 200 ? "..." : ""),
+          runId: event.run_id,
+        });
+      }
       return;
     }
 
