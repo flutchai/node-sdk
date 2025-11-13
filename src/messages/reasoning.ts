@@ -10,9 +10,9 @@ export interface IContentBlock {
   text?: string;
   metadata?: Record<string, any>;
   // For type="tool_use"
-  name?: string;   // Tool name
-  id?: string;     // Tool ID
-  input?: string;  // Tool parameters (IN) - what we passed to the tool
+  name?: string; // Tool name
+  id?: string; // Tool ID
+  input?: string; // Tool parameters (IN) - what we passed to the tool
   output?: string; // Tool result (OUT) - what the tool returned
 }
 

@@ -29,8 +29,8 @@ export interface LLMCallRecord {
  * State for a single channel
  */
 export interface ChannelState {
-  contentChain: IContentBlock[];        // Accumulated blocks for the chain
-  currentBlock: IContentBlock | null;   // Block currently being streamed
+  contentChain: IContentBlock[]; // Accumulated blocks for the chain
+  currentBlock: IContentBlock | null; // Block currently being streamed
 }
 
 /**
@@ -212,7 +212,6 @@ export class EventProcessor {
     }
   }
 
-
   /**
    * Groups tool_use and input_json_delta into proper structure
    * tool_use.input → output (tool execution result)
@@ -284,7 +283,8 @@ export class EventProcessor {
 
     // 1. Streaming content (universal for all channels)
     if (event.event === "on_chat_model_stream" && event.data?.chunk?.content) {
-      const channel = (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
+      const channel =
+        (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
       const blocks = this.normalizeContentBlocks(event.data.chunk.content);
 
       this.processContentStream(acc, channel, blocks, onPartial);
@@ -303,15 +303,15 @@ export class EventProcessor {
     }
 
     if (event.event === "on_tool_end") {
-      const channel = (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
+      const channel =
+        (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
       const state = acc.channels.get(channel);
 
       if (state?.currentBlock && state.currentBlock.type === "tool_use") {
         // Set tool OUTPUT (result of execution)
         const output = event.data?.output;
-        const outputString = typeof output === "string"
-          ? output
-          : JSON.stringify(output, null, 2);
+        const outputString =
+          typeof output === "string" ? output : JSON.stringify(output, null, 2);
 
         state.currentBlock.output = outputString;
 
@@ -328,7 +328,9 @@ export class EventProcessor {
 
         this.logger.log("✅ Tool execution completed", {
           toolName: event.name,
-          outputPreview: outputString.substring(0, 200) + (outputString.length > 200 ? "..." : ""),
+          outputPreview:
+            outputString.substring(0, 200) +
+            (outputString.length > 200 ? "..." : ""),
           runId: event.run_id,
         });
       }
@@ -355,7 +357,8 @@ export class EventProcessor {
 
     // 3. Chain end: extract final attachments and metadata (TEXT channel only)
     if (event.event === "on_chain_end") {
-      const channel = (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
+      const channel =
+        (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
 
       if (channel === StreamChannel.TEXT) {
         const output = event.data.output;
@@ -426,8 +429,8 @@ export class EventProcessor {
 
     this.logger.log("📊 [EventProcessor] Final result assembled", {
       totalChains: allChains.length,
-      textChains: allChains.filter((c) => c.channel === "text").length,
-      processingChains: allChains.filter((c) => c.channel === "processing")
+      textChains: allChains.filter(c => c.channel === "text").length,
+      processingChains: allChains.filter(c => c.channel === "processing")
         .length,
       totalSteps: allChains.reduce((sum, c) => sum + c.steps.length, 0),
     });
