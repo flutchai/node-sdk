@@ -23,6 +23,8 @@ export interface IToolCatalog extends IBaseEntity {
   toolVersion?: string;
   /** Configuration schema for tool parameters */
   configSchema?: IToolConfigOption[];
+  /** Supports dynamic schema generation based on context */
+  supportsDynamicSchema?: boolean;
 }
 
 /**
@@ -54,4 +56,6 @@ export interface IToolConfigOption {
     provider?: ModelProvider;
     isActive?: boolean;
   };
+  /** Include this field value in tool schema generation (for dynamic schemas) */
+  includeInSchema?: boolean;
 }
