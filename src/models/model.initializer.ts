@@ -4,11 +4,14 @@ import { Embeddings } from "@langchain/core/embeddings";
 import { ChatOpenAI } from "@langchain/openai";
 import { AzureChatOpenAI } from "@langchain/azure-openai";
 import { Logger } from "@nestjs/common";
-import { StructuredTool } from "@langchain/core/tools";
+import { StructuredTool, DynamicStructuredTool } from "@langchain/core/tools";
 import { Runnable } from "@langchain/core/runnables";
 import { BaseLanguageModelInput } from "@langchain/core/language_models/base";
 import { AIMessageChunk } from "@langchain/core/messages";
 import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
+import { McpToolFilter } from "../tools/mcp-tool-filter";
+import { IAgentToolConfig } from "../tools/config";
+import { createHash } from "crypto";
 
 // WORKAROUND: Temporary monkey patch for GPT-5 support in LangChain
 // LangChain doesn't yet recognize GPT-5 as a reasoning model and has issues:
@@ -369,6 +372,7 @@ import {
   ChatModelCreator,
   RerankModelCreator,
   EmbeddingModelCreator,
+  ChatModelOrRunnable,
 } from "./model.interface";
 import { ModelByIdConfig, ModelConfigFetcher } from "./llm.types";
 
@@ -391,13 +395,40 @@ export class ModelInitializer implements IModelInitializer {
   /**
    * Generate cache key for model instances based on configuration
    */
-  private generateModelCacheKey(
-    modelId: string,
-    temperature?: number,
-    maxTokens?: number,
-    modelType?: ModelType
-  ): string {
-    return `${modelId}:${temperature || "default"}:${maxTokens || "default"}:${modelType || ModelType.CHAT}`;
+  /**
+   * Generate hash from toolsConfig for cache key
+   * Uses MD5 hash to create short, unique identifier
+   */
+  private hashToolsConfig(toolsConfig: IAgentToolConfig[]): string {
+    // Sort by toolName to ensure consistent hash for same config
+    const sorted = toolsConfig
+      .map(t => `${t.toolName}:${t.enabled}:${JSON.stringify(t.config || {})}`)
+      .sort()
+      .join('|');
+
+    // Generate short MD5 hash (16 chars)
+    return createHash('md5').update(sorted).digest('hex').slice(0, 16);
+  }
+
+  /**
+   * Generate cache key from ModelByIdConfig
+   * Format: modelId:temperature:maxTokens[:toolsHash]
+   * Example: "model123:0.7:4096" or "model123:0.7:4096:a1b2c3d4e5f6g7h8"
+   */
+  private generateModelCacheKey(config: ModelByIdConfig): string {
+    const parts = [
+      config.modelId,
+      config.temperature ?? "default",
+      config.maxTokens ?? "default"
+    ];
+
+    // Add tools hash if toolsConfig provided
+    if (config.toolsConfig && config.toolsConfig.length > 0) {
+      const toolsHash = this.hashToolsConfig(config.toolsConfig);
+      parts.push(toolsHash);
+    }
+
+    return parts.join(':');
   }
 
   /**
@@ -692,20 +723,20 @@ export class ModelInitializer implements IModelInitializer {
     [ModelProvider.VOYAGEAI]: undefined,
   };
 
-  async initializeChatModel(config: ModelByIdConfig): Promise<BaseChatModel> {
-    // Generate cache key for this specific model configuration
-    const cacheKey = this.generateModelCacheKey(
-      config.modelId,
-      config.temperature,
-      config.maxTokens,
-      ModelType.CHAT
-    );
+  async initializeChatModel(
+    config: ModelByIdConfig
+  ): Promise<
+    | BaseChatModel
+    | Runnable<BaseLanguageModelInput, AIMessageChunk, BaseChatModelCallOptions>
+  > {
+    // Generate cache key for this specific model configuration (including tools if present)
+    const cacheKey = this.generateModelCacheKey(config);
 
     // Check if we already have this exact model instance cached
     const cachedModel = this.modelInstanceCache.get(cacheKey);
     if (cachedModel) {
       this.logger.debug(`Using cached chat model instance: ${cacheKey}`);
-      return cachedModel as BaseChatModel;
+      return cachedModel as ChatModelOrRunnable;
     }
 
     const modelConfig = await this.getModelConfigWithType(config.modelId);
@@ -749,8 +780,96 @@ export class ModelInitializer implements IModelInitializer {
       hasModelId: !!model.metadata?.modelId,
     });
 
+    // Bind tools if provided (toolsConfig or customTools)
+    this.logger.debug(`[TOOLS CHECK] toolsConfig exists: ${!!config.toolsConfig}, customTools exists: ${!!config.customTools}`);
+    if (config.toolsConfig) {
+      this.logger.debug(`[TOOLS CHECK] toolsConfig length: ${config.toolsConfig.length}, content: ${JSON.stringify(config.toolsConfig)}`);
+    }
+
+    if (config.toolsConfig || config.customTools) {
+      this.logger.debug(`[TOOLS] Calling bindToolsToModel with toolsConfig: ${JSON.stringify(config.toolsConfig)}`);
+      const boundModel = await this.bindToolsToModel(
+        model,
+        config.toolsConfig,
+        config.customTools
+      );
+      this.logger.debug(`[TOOLS] bindToolsToModel returned successfully`);
+
+      // Cache the model with bound tools
+      this.modelInstanceCache.set(cacheKey, boundModel);
+      return boundModel;
+    }
+
     // Cache the created model instance
     this.modelInstanceCache.set(cacheKey, model);
+
+    return model;
+  }
+
+  /**
+   * Bind tools to model (merge toolsConfig and customTools)
+   * For toolsConfig: fetch tool executors from MCP Runtime
+   * For customTools: use as-is (already prepared DynamicStructuredTool)
+   *
+   * Returns:
+   * - Runnable when tools are bound (model.bindTools returns Runnable)
+   * - BaseChatModel when no tools
+   */
+  private async bindToolsToModel(
+    model: BaseChatModel,
+    toolsConfig?: IAgentToolConfig[],
+    customTools?: DynamicStructuredTool[]
+  ): Promise<
+    | BaseChatModel
+    | Runnable<BaseLanguageModelInput, AIMessageChunk, BaseChatModelCallOptions>
+  > {
+    const allTools: StructuredTool[] = [];
+
+    // Process toolsConfig (fetch dynamic schemas from MCP Runtime)
+    if (toolsConfig && toolsConfig.length > 0) {
+      try {
+        // Filter enabled tools
+        const enabledToolsConfig = toolsConfig.filter(tc => tc.enabled !== false);
+
+        if (enabledToolsConfig.length > 0) {
+          this.logger.debug(
+            `Fetching ${enabledToolsConfig.length} tools with dynamic schemas from MCP Runtime: ${enabledToolsConfig.map(tc => tc.toolName).join(", ")}`
+          );
+
+          // Use McpToolFilter to fetch tools with dynamic schemas
+          const mcpToolFilter = new McpToolFilter();
+          const mcpTools = await mcpToolFilter.getFilteredTools(
+            enabledToolsConfig
+          );
+
+          this.logger.debug(
+            `Successfully fetched ${mcpTools.length} tools with dynamic schemas from MCP Runtime`
+          );
+
+          allTools.push(...mcpTools);
+        }
+      } catch (error) {
+        this.logger.error(
+          `Failed to fetch tools from MCP Runtime: ${error instanceof Error ? error.message : String(error)}`
+        );
+        // Continue without MCP tools
+      }
+    }
+
+    // Add custom tools (already prepared)
+    if (customTools && customTools.length > 0) {
+      allTools.push(...customTools);
+      this.logger.debug(`Added ${customTools.length} custom tools to model`);
+    }
+
+    // Bind tools to model if we have any
+    if (allTools.length > 0) {
+      this.logger.debug(`Binding ${allTools.length} tools to model`);
+
+      // bindTools returns Runnable, not BaseChatModel
+      const modelWithTools = model.bindTools(allTools);
+      return modelWithTools;
+    }
 
     return model;
   }
@@ -759,12 +878,7 @@ export class ModelInitializer implements IModelInitializer {
     config: ModelByIdConfig
   ): Promise<BaseDocumentCompressor> {
     // Generate cache key for this rerank model configuration
-    const cacheKey = this.generateModelCacheKey(
-      config.modelId,
-      undefined, // rerank models typically don't use temperature
-      config.maxTokens,
-      ModelType.RERANK
-    );
+    const cacheKey = this.generateModelCacheKey(config);
 
     // Check if we already have this exact model instance cached
     const cachedModel = this.modelInstanceCache.get(cacheKey);
@@ -805,12 +919,7 @@ export class ModelInitializer implements IModelInitializer {
 
   async initializeEmbeddingModel(config: ModelByIdConfig): Promise<Embeddings> {
     // Generate cache key for this embedding model configuration
-    const cacheKey = this.generateModelCacheKey(
-      config.modelId,
-      undefined, // embedding models typically don't use temperature
-      undefined, // embedding models typically don't use maxTokens
-      ModelType.EMBEDDING
-    );
+    const cacheKey = this.generateModelCacheKey(config);
 
     // Check if we already have this exact model instance cached
     const cachedModel = this.modelInstanceCache.get(cacheKey);
@@ -851,7 +960,7 @@ export class ModelInitializer implements IModelInitializer {
 
   // === NEW TYPED METHODS ===
 
-  async createChatModelById(modelId: string): Promise<BaseChatModel> {
+  async createChatModelById(modelId: string): Promise<ChatModelOrRunnable> {
     const config = await this.getModelConfigWithType(modelId);
 
     if (config.modelType !== ModelType.CHAT) {
@@ -1023,7 +1132,7 @@ export class ModelInitializer implements IModelInitializer {
   private async fetchFromApi(
     modelId: string
   ): Promise<ModelConfigWithTokenAndType> {
-    const apiUrl = process.env.API_URL || "http://amelie-service";
+    const apiUrl = process.env.API_URL;
     const token = process.env.INTERNAL_API_TOKEN;
 
     if (!token) {
@@ -1077,64 +1186,3 @@ export class ModelInitializer implements IModelInitializer {
   }
 }
 
-/**
- * Helper function for Azure OpenAI tools binding
- *
- * Azure OpenAI doesn't support bindTools method, so we need to:
- * 1. Check if model has bindTools (regular OpenAI models)
- * 2. If yes - use bindTools normally
- * 3. If no (Azure) - pass tools manually in config
- *
- * @param model - LangChain chat model instance
- * @param tools - Array of tools to bind/configure
- * @param baseConfig - Base configuration for invoke
- * @returns Object with prepared model and config for tools
- */
-export function prepareModelWithTools(
-  model: BaseChatModel,
-  tools: StructuredTool[],
-  baseConfig: any = {}
-): {
-  modelWithTools: any; // Can be BaseChatModel or result of bindTools
-  finalConfig: any;
-  toolsMethod: "bindTools" | "manual" | "none";
-} {
-  if (tools.length === 0) {
-    return {
-      modelWithTools: model,
-      finalConfig: baseConfig,
-      toolsMethod: "none",
-    };
-  }
-
-  // Check if model supports bindTools (regular OpenAI models)
-  if (model.bindTools && typeof model.bindTools === "function") {
-    try {
-      const modelWithTools = model.bindTools(tools);
-      return {
-        modelWithTools,
-        finalConfig: baseConfig,
-        toolsMethod: "bindTools",
-      };
-    } catch (error) {
-      // Fallback to manual if bindTools fails
-      const invokeConfig = { tools };
-      const finalConfig = { ...baseConfig, ...invokeConfig };
-      return {
-        modelWithTools: model,
-        finalConfig,
-        toolsMethod: "manual",
-      };
-    }
-  }
-
-  // Azure OpenAI case - pass tools manually in config
-  const invokeConfig = { tools };
-  const finalConfig = { ...baseConfig, ...invokeConfig };
-
-  return {
-    modelWithTools: model,
-    finalConfig,
-    toolsMethod: "manual",
-  };
-}

@@ -3,6 +3,7 @@ import { Logger } from "@nestjs/common";
 import axios from "axios";
 import { McpConverter } from "./mcp-converter";
 import { McpTool, McpRuntimeClient } from "./mcp.interfaces";
+import { IAgentToolConfig } from "./config";
 
 /**
  * Utility for fetching and filtering MCP tools from runtime
@@ -20,49 +21,55 @@ export class McpToolFilter {
   }
 
   /**
-   * Fetch available tools from MCP runtime with optional filtering
-   * @param enabledTools Array of tool names to filter for
-   * @returns Array of LangChain Tool instances
+   * Fetch available tools from MCP runtime with dynamic schema generation
+   * @param toolsConfig Array of tool configurations with dynamic config
+   * @returns Array of LangChain Tool instances with dynamic schemas
    */
   async getFilteredTools(
-    enabledTools: string[] = []
+    toolsConfig: IAgentToolConfig[] = []
   ): Promise<StructuredTool[]> {
     this.logger.debug(
-      `[DEBUG] Getting filtered tools. Enabled: ${enabledTools.join(", ")}`
+      `[DEBUG] Getting filtered tools with dynamic schemas. Config: ${JSON.stringify(toolsConfig)}`
     );
     this.logger.debug(`[DEBUG] MCP Runtime URL: ${this.mcpRuntimeUrl}`);
 
-    if (enabledTools.length === 0) {
-      this.logger.debug("No tools enabled, returning empty array");
+    if (toolsConfig.length === 0) {
+      this.logger.debug("No tools configured, returning empty array");
       return [];
     }
 
     try {
-      // Fetch filtered tools from MCP runtime using the filter parameter
-      const filterParam = enabledTools.join(",");
+      // Call POST /tools/schemas with full configuration for dynamic schema generation
       this.logger.debug(
-        `[DEBUG] Making HTTP request to: ${this.mcpRuntimeUrl}/tools/list with filter: ${filterParam}`
+        `[DEBUG] Making HTTP POST request to: ${this.mcpRuntimeUrl}/tools/schemas`
       );
+      this.logger.debug(`[DEBUG] Request body: ${JSON.stringify(toolsConfig)}`);
 
-      const response = await axios.get(`${this.mcpRuntimeUrl}/tools/list`, {
-        params: { filter: filterParam },
-        timeout: 5000,
-      });
+      const response = await axios.post(
+        `${this.mcpRuntimeUrl}/tools/schemas`,
+        { tools: toolsConfig },
+        {
+          timeout: 5000,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
       this.logger.debug(
         `[DEBUG] HTTP response status: ${response.status}, data length: ${Array.isArray(response.data) ? response.data.length : "not array"}`
       );
 
-      const filteredTools: McpTool[] = Array.isArray(response.data)
+      const dynamicTools: McpTool[] = Array.isArray(response.data)
         ? response.data
         : [];
       this.logger.debug(
-        `Retrieved ${filteredTools.length} filtered MCP tools for: ${enabledTools.join(", ")}`
+        `Retrieved ${dynamicTools.length} dynamic tool schemas from MCP Runtime`
       );
 
       // Create a simple MCP client for tool execution
       const mcpClient: McpRuntimeClient = {
-        getTools: async () => filteredTools,
+        getTools: async () => dynamicTools,
         executeTool: async (name: string, args: any) => {
           this.logger.debug(`[DEBUG] Executing tool ${name} with args:`, args);
           const response = await axios.post(
@@ -79,22 +86,22 @@ export class McpToolFilter {
 
       // Convert to LangChain tools
       this.logger.log(
-        `🚀 [McpToolFilter] Converting ${filteredTools.length} tools using new McpConverter`
+        `🚀 [McpToolFilter] Converting ${dynamicTools.length} dynamic tools using McpConverter`
       );
-      const tools = await this.mcpConverter.convertTools(filteredTools);
+      const tools = await this.mcpConverter.convertTools(dynamicTools);
       this.logger.log(
         `🚀 [McpToolFilter] Converted tools: ${tools.map(t => t.name).join(", ")}`
       );
 
       this.logger.log(
-        `Configured ${tools.length} tools from MCP runtime: ${filteredTools.map(t => t.name).join(", ")}`
+        `Configured ${tools.length} tools with dynamic schemas from MCP runtime: ${dynamicTools.map(t => t.name).join(", ")}`
       );
       return tools;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.warn(
-        `[DEBUG] Failed to fetch tools from MCP runtime (${this.mcpRuntimeUrl}): ${errorMessage}`
+        `[DEBUG] Failed to fetch dynamic tool schemas from MCP runtime (${this.mcpRuntimeUrl}): ${errorMessage}`
       );
       this.logger.warn(`[DEBUG] Error details:`, {
         error,
