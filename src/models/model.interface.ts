@@ -1,11 +1,31 @@
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import {
+  BaseChatModel,
+  BaseChatModelCallOptions,
+} from "@langchain/core/language_models/chat_models";
 import { BaseDocumentCompressor } from "@langchain/core/retrievers/document_compressors";
 import { Embeddings } from "@langchain/core/embeddings";
+import { Runnable } from "@langchain/core/runnables";
+import { BaseLanguageModelInput } from "@langchain/core/language_models/base";
+import { AIMessageChunk } from "@langchain/core/messages";
 import { ModelType } from "./enums";
 import { ModelByIdConfig, ModelConfigWithToken } from "./llm.types";
 
+// Chat model with tools bound returns Runnable, not BaseChatModel
+export type ChatModelWithTools = Runnable<
+  BaseLanguageModelInput,
+  AIMessageChunk,
+  BaseChatModelCallOptions
+>;
+
+// Chat model that may or may not have tools
+export type ChatModelOrRunnable = BaseChatModel | ChatModelWithTools;
+
 // Universal model types
-export type Model = BaseChatModel | BaseDocumentCompressor | Embeddings;
+export type Model =
+  | BaseChatModel
+  | ChatModelWithTools
+  | BaseDocumentCompressor
+  | Embeddings;
 
 // Configuration with model type
 export interface ModelByIdWithTypeConfig extends ModelByIdConfig {
@@ -24,7 +44,8 @@ export interface ModelConfigWithTokenAndType extends ModelConfigWithToken {
 // Universal interface for initializing different model types
 export interface IModelInitializer {
   // Typed methods for each model type
-  createChatModelById(modelId: string): Promise<BaseChatModel>;
+  // Note: createChatModelById can return Runnable when tools are bound
+  createChatModelById(modelId: string): Promise<ChatModelOrRunnable>;
   createRerankModelById(modelId: string): Promise<BaseDocumentCompressor>;
   createEmbeddingModelById(modelId: string): Promise<Embeddings>;
 
@@ -32,7 +53,8 @@ export interface IModelInitializer {
   createModelById(modelId: string, expectedType?: ModelType): Promise<Model>;
 
   // Legacy methods for backward compatibility
-  initializeChatModel(config: ModelByIdConfig): Promise<BaseChatModel>;
+  // Note: initializeChatModel can return Runnable when tools are bound
+  initializeChatModel(config: ModelByIdConfig): Promise<ChatModelOrRunnable>;
   initializeRerankModel(
     config: ModelByIdConfig
   ): Promise<BaseDocumentCompressor>;
