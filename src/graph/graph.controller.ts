@@ -40,6 +40,7 @@ export class GraphController {
   constructor(
     @Inject("GRAPH_SERVICE")
     protected readonly graphService: IGraphService,
+    @Inject(BuilderRegistryService)
     private readonly builderRegistry: BuilderRegistryService
   ) {}
 
