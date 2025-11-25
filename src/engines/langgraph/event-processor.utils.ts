@@ -427,12 +427,22 @@ export class EventProcessor {
           }
         : null;
 
+    // Extract text from text channel for backwards compatibility
+    const textChain = allChains.find(c => c.channel === "text");
+    const text = textChain
+      ? textChain.steps
+          .filter(step => step.type === "text")
+          .map(step => step.text || "")
+          .join("")
+      : "";
+
     this.logger.log("📊 [EventProcessor] Final result assembled", {
       totalChains: allChains.length,
       textChains: allChains.filter(c => c.channel === "text").length,
       processingChains: allChains.filter(c => c.channel === "processing")
         .length,
       totalSteps: allChains.reduce((sum, c) => sum + c.steps.length, 0),
+      textLength: text.length,
     });
 
     return {
@@ -440,6 +450,7 @@ export class EventProcessor {
         contentChains: allChains.length > 0 ? allChains : undefined,
         attachments: acc.attachments,
         metadata: acc.metadata,
+        text, // Add extracted text for backwards compatibility
       },
       trace,
     };

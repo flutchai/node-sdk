@@ -404,10 +404,10 @@ export class ModelInitializer implements IModelInitializer {
     const sorted = toolsConfig
       .map(t => `${t.toolName}:${t.enabled}:${JSON.stringify(t.config || {})}`)
       .sort()
-      .join('|');
+      .join("|");
 
     // Generate short MD5 hash (16 chars)
-    return createHash('md5').update(sorted).digest('hex').slice(0, 16);
+    return createHash("md5").update(sorted).digest("hex").slice(0, 16);
   }
 
   /**
@@ -419,7 +419,7 @@ export class ModelInitializer implements IModelInitializer {
     const parts = [
       config.modelId,
       config.temperature ?? "default",
-      config.maxTokens ?? "default"
+      config.maxTokens ?? "default",
     ];
 
     // Add tools hash if toolsConfig provided
@@ -428,7 +428,7 @@ export class ModelInitializer implements IModelInitializer {
       parts.push(toolsHash);
     }
 
-    return parts.join(':');
+    return parts.join(":");
   }
 
   /**
@@ -781,13 +781,19 @@ export class ModelInitializer implements IModelInitializer {
     });
 
     // Bind tools if provided (toolsConfig or customTools)
-    this.logger.debug(`[TOOLS CHECK] toolsConfig exists: ${!!config.toolsConfig}, customTools exists: ${!!config.customTools}`);
+    this.logger.debug(
+      `[TOOLS CHECK] toolsConfig exists: ${!!config.toolsConfig}, customTools exists: ${!!config.customTools}`
+    );
     if (config.toolsConfig) {
-      this.logger.debug(`[TOOLS CHECK] toolsConfig length: ${config.toolsConfig.length}, content: ${JSON.stringify(config.toolsConfig)}`);
+      this.logger.debug(
+        `[TOOLS CHECK] toolsConfig length: ${config.toolsConfig.length}, content: ${JSON.stringify(config.toolsConfig)}`
+      );
     }
 
     if (config.toolsConfig || config.customTools) {
-      this.logger.debug(`[TOOLS] Calling bindToolsToModel with toolsConfig: ${JSON.stringify(config.toolsConfig)}`);
+      this.logger.debug(
+        `[TOOLS] Calling bindToolsToModel with toolsConfig: ${JSON.stringify(config.toolsConfig)}`
+      );
       const boundModel = await this.bindToolsToModel(
         model,
         config.toolsConfig,
@@ -829,7 +835,9 @@ export class ModelInitializer implements IModelInitializer {
     if (toolsConfig && toolsConfig.length > 0) {
       try {
         // Filter enabled tools
-        const enabledToolsConfig = toolsConfig.filter(tc => tc.enabled !== false);
+        const enabledToolsConfig = toolsConfig.filter(
+          tc => tc.enabled !== false
+        );
 
         if (enabledToolsConfig.length > 0) {
           this.logger.debug(
@@ -838,9 +846,8 @@ export class ModelInitializer implements IModelInitializer {
 
           // Use McpToolFilter to fetch tools with dynamic schemas
           const mcpToolFilter = new McpToolFilter();
-          const mcpTools = await mcpToolFilter.getFilteredTools(
-            enabledToolsConfig
-          );
+          const mcpTools =
+            await mcpToolFilter.getFilteredTools(enabledToolsConfig);
 
           this.logger.debug(
             `Successfully fetched ${mcpTools.length} tools with dynamic schemas from MCP Runtime`
@@ -1185,4 +1192,3 @@ export class ModelInitializer implements IModelInitializer {
     return result;
   }
 }
-

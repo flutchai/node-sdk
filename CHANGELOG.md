@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.11] - 2025-11-25
+
+### Added
+
+- Added `text` field to EventProcessor final result for backwards compatibility with clients expecting plain text response
+- Added explicit `@Inject(BuilderRegistryService)` decorator in GraphController for proper NestJS dependency injection
+
+### Changed
+
+- EventProcessor now extracts text from "text" channel and concatenates all text steps into a single string
+- Enhanced logging in EventProcessor to include textLength metric
+
 ## [0.1.9] - 2025-11-12
 
 ### Added
@@ -142,7 +154,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.11...HEAD
+[0.1.11]: https://github.com/flutchai/node-sdk/compare/v0.1.9...v0.1.11
 [0.1.9]: https://github.com/flutchai/node-sdk/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/flutchai/node-sdk/compare/v0.1.6...v0.1.8
 [0.1.6]: https://github.com/flutchai/node-sdk/compare/v0.1.5...v0.1.6
