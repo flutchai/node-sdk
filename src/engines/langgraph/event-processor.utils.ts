@@ -366,11 +366,20 @@ export class EventProcessor {
         // Extract attachments and metadata from different graph output formats
         // Use merge instead of replace to preserve data from multiple nodes
         if (output?.answer) {
-          acc.attachments = [...acc.attachments, ...(output.answer.attachments || [])];
+          acc.attachments = [
+            ...acc.attachments,
+            ...(output.answer.attachments || []),
+          ];
           acc.metadata = { ...acc.metadata, ...(output.answer.metadata || {}) };
         } else if (output?.generation) {
-          acc.attachments = [...acc.attachments, ...(output.generation.attachments || [])];
-          acc.metadata = { ...acc.metadata, ...(output.generation.metadata || {}) };
+          acc.attachments = [
+            ...acc.attachments,
+            ...(output.generation.attachments || []),
+          ];
+          acc.metadata = {
+            ...acc.metadata,
+            ...(output.generation.metadata || {}),
+          };
         } else if (output?.attachments || output?.metadata) {
           acc.attachments = [...acc.attachments, ...(output.attachments || [])];
           acc.metadata = { ...acc.metadata, ...(output.metadata || {}) };
