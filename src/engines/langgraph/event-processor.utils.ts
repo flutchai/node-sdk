@@ -364,15 +364,16 @@ export class EventProcessor {
         const output = event.data.output;
 
         // Extract attachments and metadata from different graph output formats
+        // Use merge instead of replace to preserve data from multiple nodes
         if (output?.answer) {
-          acc.attachments = output.answer.attachments || [];
-          acc.metadata = output.answer.metadata || {};
+          acc.attachments = [...acc.attachments, ...(output.answer.attachments || [])];
+          acc.metadata = { ...acc.metadata, ...(output.answer.metadata || {}) };
         } else if (output?.generation) {
-          acc.attachments = output.generation.attachments || [];
-          acc.metadata = output.generation.metadata || {};
-        } else if (output) {
-          acc.attachments = output.attachments || [];
-          acc.metadata = output.metadata || {};
+          acc.attachments = [...acc.attachments, ...(output.generation.attachments || [])];
+          acc.metadata = { ...acc.metadata, ...(output.generation.metadata || {}) };
+        } else if (output?.attachments || output?.metadata) {
+          acc.attachments = [...acc.attachments, ...(output.attachments || [])];
+          acc.metadata = { ...acc.metadata, ...(output.metadata || {}) };
         }
       }
 
