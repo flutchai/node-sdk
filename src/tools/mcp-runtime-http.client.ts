@@ -24,13 +24,17 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
   constructor(mcpRuntimeUrl?: string) {
     this.baseUrl =
       mcpRuntimeUrl || process.env.MCP_RUNTIME_URL || "http://localhost:3004";
+
+    // Use configurable timeout - tools like call_agent can take a very long time (up to 15 minutes)
+    const timeout = Number(process.env.MCP_RUNTIME_TIMEOUT || 900000); // Default: 15 minutes
+
     this.httpClient = axios.create({
       baseURL: this.baseUrl,
-      timeout: 30000, // 30 seconds
+      timeout,
     });
 
     this.logger.log(
-      `MCP Runtime HTTP Client initialized with URL: ${this.baseUrl}`
+      `MCP Runtime HTTP Client initialized with URL: ${this.baseUrl}, timeout: ${timeout}ms`
     );
   }
 

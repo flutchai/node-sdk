@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.14] - 2025-12-06
+
+### Changed
+
+- Increased default timeout for MCP Runtime HTTP client from 30 seconds to 15 minutes (configurable via `MCP_RUNTIME_TIMEOUT` env variable)
+- This allows long-running tools like `call_agent` to complete without timing out
+
 ## [0.1.13] - 2025-11-26
 
 ### Fixed
