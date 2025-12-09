@@ -46,6 +46,10 @@ export class LangGraphEngine implements IGraphEngine {
     onPartial: (chunk: string) => void,
     signal?: AbortSignal
   ): Promise<any> {
+    // Create accumulator BEFORE try block to ensure it's available in finally
+    const acc = this.eventProcessor.createAccumulator();
+    let streamError: Error | null = null;
+
     try {
       if (signal) {
         config.signal = signal;
@@ -55,9 +59,6 @@ export class LangGraphEngine implements IGraphEngine {
         ...config,
         version: "v2", // Important for correct operation
       });
-
-      // Create accumulator to collect data from events
-      const acc = this.eventProcessor.createAccumulator();
 
       // Process the event stream
       for await (const event of eventStream) {
@@ -69,19 +70,49 @@ export class LangGraphEngine implements IGraphEngine {
           );
         }
       }
+    } catch (error) {
+      // Capture error but don't throw yet - we need to send trace first
+      streamError = error instanceof Error ? error : new Error(String(error));
+      this.logger.error(
+        `[STREAM-ERROR] Error in streamGraph: ${streamError.message}`
+      );
+      this.logger.error(`[STREAM-ERROR] Stack trace: ${streamError.stack}`);
+    } finally {
+      // ALWAYS try to send trace events, even if graph failed
+      // This ensures we capture metrics for billing even on errors
+      await this.sendTraceFromAccumulator(acc, config, streamError);
+    }
 
-      // Get final result from accumulator
-      const { content, trace } = this.eventProcessor.getResult(acc);
+    // Get final result from accumulator
+    const { content, trace } = this.eventProcessor.getResult(acc);
 
-      this.logger.debug("[STREAM-RESULT] Got result from EventProcessor", {
-        hasContent: !!content,
-        hasContext: !!config.configurable?.context,
-        hasTrace: !!trace,
-        traceEvents: trace?.events?.length || 0,
-      });
+    this.logger.debug("[STREAM-RESULT] Got result from EventProcessor", {
+      hasContent: !!content,
+      hasContext: !!config.configurable?.context,
+      hasTrace: !!trace,
+      traceEvents: trace?.events?.length || 0,
+      hadError: !!streamError,
+    });
 
-      // NOTE: Metrics are NO LONGER sent separately via webhook
-      // Backend will extract metrics from trace events in UsageTrackerService
+    // Re-throw the error after sending trace
+    if (streamError) {
+      throw streamError;
+    }
+
+    return content;
+  }
+
+  /**
+   * Extract trace from accumulator and send to backend webhook
+   * Called in finally block to ensure trace is sent even on errors
+   */
+  private async sendTraceFromAccumulator(
+    acc: ReturnType<EventProcessor["createAccumulator"]>,
+    config: any,
+    error: Error | null
+  ): Promise<void> {
+    try {
+      const { trace } = this.eventProcessor.getResult(acc);
 
       if (trace && trace.events.length > 0 && config.configurable?.context) {
         const context = config.configurable.context;
@@ -91,6 +122,8 @@ export class LangGraphEngine implements IGraphEngine {
           totalEvents: trace.totalEvents,
           eventsArrayLength: trace.events.length,
           firstEventType: trace.events[0]?.type,
+          hadError: !!error,
+          errorMessage: error?.message,
         });
 
         // Send trace events batch to TimeSeries collection
@@ -103,8 +136,12 @@ export class LangGraphEngine implements IGraphEngine {
           events: trace.events,
           totalEvents: trace.totalEvents,
           startedAt: trace.startedAt,
-          completedAt: trace.completedAt,
-          durationMs: trace.durationMs,
+          completedAt: trace.completedAt || Date.now(),
+          durationMs: trace.durationMs || Date.now() - trace.startedAt,
+          status: error ? "error" : "success",
+          error: error
+            ? { message: error.message, name: error.name }
+            : undefined,
         });
       } else {
         this.logger.debug("[TRACE-WEBHOOK] Skipping webhook", {
@@ -114,16 +151,21 @@ export class LangGraphEngine implements IGraphEngine {
           contextKeys: config.configurable?.context
             ? Object.keys(config.configurable.context)
             : [],
+          hadError: !!error,
         });
       }
-
-      return content;
-    } catch (error) {
+    } catch (webhookError) {
+      // Don't throw - webhook failure shouldn't mask the original error
       this.logger.error(
-        `[STREAM-ERROR] Error in streamGraph: ${error.message}`
+        "[TRACE-WEBHOOK] Failed to send trace in finally block",
+        {
+          error:
+            webhookError instanceof Error
+              ? webhookError.message
+              : String(webhookError),
+          originalError: error?.message,
+        }
       );
-      this.logger.error(`[STREAM-ERROR] Stack trace: ${error.stack}`);
-      throw error;
     }
   }
 
@@ -198,6 +240,8 @@ export class LangGraphEngine implements IGraphEngine {
     startedAt: number;
     completedAt: number;
     durationMs: number;
+    status?: "success" | "error";
+    error?: { message: string; name: string };
   }): Promise<void> {
     try {
       const backendUrl =
@@ -225,6 +269,8 @@ export class LangGraphEngine implements IGraphEngine {
         startedAt: payload.startedAt,
         completedAt: payload.completedAt,
         durationMs: payload.durationMs,
+        status: payload.status || "success",
+        error: payload.error,
         events: payload.events.map(event => ({
           timestamp: event.timestamp
             ? new Date(event.timestamp).toISOString()

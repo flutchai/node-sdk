@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.15] - 2025-12-09
+
+### Fixed
+
+- **Critical**: Fixed trace data loss when graph execution fails with an error. Now trace events are ALWAYS sent to backend webhook for billing, even when the graph throws an exception. This ensures LLM tokens spent before an error are properly tracked for billing purposes.
+
+### Added
+
+- Comprehensive unit tests for LangGraphEngine (12 test cases)
+- Tests cover: streaming, error handling, trace preservation, webhook behavior, abort signals
+- Critical test verifying trace is sent for billing even on graph failures
+
+### Changed
+
+- LangGraphEngine.streamGraph() now uses try-catch-finally pattern to ensure trace webhook is called in finally block
+- Added `status` and `error` fields to trace webhook payload to indicate execution result
+- Improved error logging with stack traces for debugging
+
 ## [0.1.14] - 2025-12-06
 
 ### Changed
@@ -167,7 +185,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.13...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.15...HEAD
+[0.1.15]: https://github.com/flutchai/node-sdk/compare/v0.1.14...v0.1.15
+[0.1.14]: https://github.com/flutchai/node-sdk/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/flutchai/node-sdk/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/flutchai/node-sdk/compare/v0.1.9...v0.1.12
 [0.1.9]: https://github.com/flutchai/node-sdk/compare/v0.1.8...v0.1.9
