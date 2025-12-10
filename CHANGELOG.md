@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.17] - 2025-12-10
+
+### Fixed
+
+- Fixed TypeScript compilation error in mcp-converter.ts by replacing `require()` with ES6 `import` for zod-to-json-schema
+- Added zod-to-json-schema as a runtime dependency to package.json
+
 ## [0.1.16] - 2025-12-09
 
 ### Fixed
@@ -185,7 +192,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.16...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.17...HEAD
+[0.1.17]: https://github.com/flutchai/node-sdk/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/flutchai/node-sdk/compare/v0.1.14...v0.1.16
 [0.1.14]: https://github.com/flutchai/node-sdk/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/flutchai/node-sdk/compare/v0.1.12...v0.1.13
