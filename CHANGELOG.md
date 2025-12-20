@@ -19,12 +19,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed `GraphRecursionError: Recursion limit of 25 reached without hitting a stop condition` that occurred during complex agent workflows with many tool calls
 
-## [0.1.17] - 2025-12-10
+## [0.1.17] - 2025-12-20
 
 ### Fixed
 
 - Fixed TypeScript compilation error in mcp-converter.ts by replacing `require()` with ES6 `import` for zod-to-json-schema
 - Added zod-to-json-schema as a runtime dependency to package.json
+- Fixed tool output correlation in EventProcessor by implementing run_id and tool_call_id mapping system
+- Tool outputs now correctly match to their corresponding tool_use blocks even when multiple tools execute concurrently
+- Added bidirectional mapping (run_id → block, tool_call_id → block) to handle various tool execution scenarios
+
+### Changed
+
+- Enhanced MCP Runtime HTTP client to pass tool_call_id in metadata for better event correlation
+- Improved tool event logging with tool_call_id tracking
+- EventProcessor now maintains separate maps for run_id and tool_call_id to tool block associations
 
 ## [0.1.16] - 2025-12-09
 
