@@ -31,6 +31,8 @@ export interface LLMCallRecord {
 export interface ChannelState {
   contentChain: IContentBlock[]; // Accumulated blocks for the chain
   currentBlock: IContentBlock | null; // Block currently being streamed
+  runIdToBlock: Map<string, IContentBlock>; // Map run_id to tool block for matching on_tool_end
+  toolCallIdToBlock: Map<string, IContentBlock>; // Map tool_call_id to tool block for direct lookup
 }
 
 /**
@@ -63,8 +65,8 @@ export class EventProcessor {
   createAccumulator(): StreamAccumulator {
     return {
       channels: new Map([
-        [StreamChannel.TEXT, { contentChain: [], currentBlock: null }],
-        [StreamChannel.PROCESSING, { contentChain: [], currentBlock: null }],
+        [StreamChannel.TEXT, { contentChain: [], currentBlock: null, runIdToBlock: new Map(), toolCallIdToBlock: new Map() }],
+        [StreamChannel.PROCESSING, { contentChain: [], currentBlock: null, runIdToBlock: new Map(), toolCallIdToBlock: new Map() }],
       ]),
       attachments: [],
       metadata: {},
@@ -152,6 +154,11 @@ export class EventProcessor {
           input: block.input || "",
           output: "",
         };
+
+        // Store tool_call_id -> block mapping for fast lookup
+        if (block.id) {
+          state.toolCallIdToBlock.set(block.id, state.currentBlock);
+        }
 
         // Send delta
         this.sendDelta(
@@ -293,11 +300,70 @@ export class EventProcessor {
 
     // 3. Tool events: log tool execution lifecycle
     if (event.event === "on_tool_start") {
+      const channel =
+        (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
+      const state = acc.channels.get(channel);
+
+      if (state) {
+        let toolBlock: IContentBlock | null = null;
+
+        // Try to get tool_call_id from metadata (set in executeToolWithEvents)
+        const toolCallId = event.metadata?.tool_call_id as string | undefined;
+
+        if (toolCallId) {
+          // Direct lookup by tool_call_id
+          toolBlock = state.toolCallIdToBlock.get(toolCallId) || null;
+        }
+
+        // Fallback: search by name if tool_call_id not found
+        if (!toolBlock) {
+          // Check currentBlock first
+          if (
+            state.currentBlock &&
+            state.currentBlock.type === "tool_use" &&
+            state.currentBlock.name === event.name
+          ) {
+            const isAlreadyMapped = Array.from(state.runIdToBlock.values()).some(
+              (block) => block === state.currentBlock
+            );
+            if (!isAlreadyMapped) {
+              toolBlock = state.currentBlock;
+            }
+          }
+
+          // If not found, search contentChain in reverse
+          if (!toolBlock) {
+            for (let i = state.contentChain.length - 1; i >= 0; i--) {
+              const block = state.contentChain[i];
+              if (block.type === "tool_use" && block.name === event.name) {
+                const isAlreadyMapped = Array.from(state.runIdToBlock.values()).some(
+                  (b) => b === block
+                );
+                if (!isAlreadyMapped) {
+                  toolBlock = block;
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        if (toolBlock) {
+          state.runIdToBlock.set(event.run_id, toolBlock);
+        } else {
+          this.logger.warn("⚠️ on_tool_start: Could not find tool block", {
+            toolName: event.name,
+            toolCallId,
+            runId: event.run_id,
+          });
+        }
+      }
+
       this.logger.log("🔧 Tool execution started", {
         toolName: event.name,
         input: event.data?.input,
         runId: event.run_id,
-        metadata: event.metadata,
+        toolCallId: event.metadata?.tool_call_id,
       });
       return;
     }
@@ -307,33 +373,51 @@ export class EventProcessor {
         (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
       const state = acc.channels.get(channel);
 
-      if (state?.currentBlock && state.currentBlock.type === "tool_use") {
-        // Set tool OUTPUT (result of execution)
-        const output = event.data?.output;
-        const outputString =
-          typeof output === "string" ? output : JSON.stringify(output, null, 2);
-
-        state.currentBlock.output = outputString;
-
-        // Send delta with tool output
-        this.sendDelta(
-          channel,
-          {
-            type: "tool_output_chunk",
-            stepId: state.currentBlock.id,
-            chunk: outputString,
-          },
-          onPartial
-        );
-
-        this.logger.log("✅ Tool execution completed", {
-          toolName: event.name,
-          outputPreview:
-            outputString.substring(0, 200) +
-            (outputString.length > 200 ? "..." : ""),
-          runId: event.run_id,
-        });
+      if (!state) {
+        this.logger.warn("❌ on_tool_end: channel state not found");
+        return;
       }
+
+      // Find the tool block by run_id (set in on_tool_start)
+      const toolBlock = state.runIdToBlock.get(event.run_id);
+
+      if (!toolBlock || toolBlock.type !== "tool_use") {
+        this.logger.warn("❌ on_tool_end: tool block not found for run_id", {
+          runId: event.run_id,
+          toolName: event.name,
+        });
+        return;
+      }
+
+      // Set tool OUTPUT (result of execution)
+      const output = event.data?.output;
+      const outputString =
+        typeof output === "string" ? output : JSON.stringify(output, null, 2);
+
+      toolBlock.output = outputString;
+
+      // Send delta with tool output
+      this.sendDelta(
+        channel,
+        {
+          type: "tool_output_chunk",
+          stepId: toolBlock.id,
+          chunk: outputString,
+        },
+        onPartial
+      );
+
+      this.logger.log("✅ Tool execution completed", {
+        toolName: event.name,
+        outputPreview:
+          outputString.substring(0, 200) +
+          (outputString.length > 200 ? "..." : ""),
+        runId: event.run_id,
+      });
+
+      // Clean up mapping
+      state.runIdToBlock.delete(event.run_id);
+
       return;
     }
 

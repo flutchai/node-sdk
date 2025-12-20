@@ -147,10 +147,16 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
     const parsedConfig = parseCallbackConfigArg(config);
     const callbackManager = CallbackManager.configure(parsedConfig.callbacks);
 
+    // Add tool_call_id to metadata for event correlation
+    const enhancedMetadata = {
+      ...parsedConfig.metadata,
+      tool_call_id: toolCallId,
+    };
+
     let runManager;
 
     try {
-      // Emit on_tool_start event
+      // Emit on_tool_start event with tool_call_id in metadata
       runManager = await callbackManager?.handleToolStart(
         {
           name: toolName,
@@ -162,7 +168,7 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
         parsedConfig.runId,
         undefined,
         parsedConfig.tags,
-        parsedConfig.metadata,
+        enhancedMetadata,
         toolName
       );
 
