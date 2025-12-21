@@ -2,6 +2,7 @@ import { DynamicStructuredTool, StructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import axios from "axios";
 import { Logger } from "@nestjs/common";
+import { zodToJsonSchema } from "zod-to-json-schema";
 import { McpTool } from "./mcp.interfaces";
 
 interface ToolExecutionRequest {
@@ -176,7 +177,6 @@ export class McpConverter {
 
     // CRITICAL CHECK: Convert Zod back to JSON Schema to see what LangChain will send to LLM
     try {
-      const { zodToJsonSchema } = require("zod-to-json-schema");
       const convertedJsonSchema = zodToJsonSchema(schema);
       logger.warn(
         `🔧 [${mcpTool.name}] JSON Schema that LangChain will use:`,
