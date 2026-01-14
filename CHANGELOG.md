@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.18] - 2025-01-14
+## [0.1.19] - 2025-01-14
 
 ### Added
 
@@ -213,7 +213,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.17...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.19...HEAD
+[0.1.19]: https://github.com/flutchai/node-sdk/compare/v0.1.17...v0.1.19
 [0.1.17]: https://github.com/flutchai/node-sdk/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/flutchai/node-sdk/compare/v0.1.14...v0.1.16
 [0.1.14]: https://github.com/flutchai/node-sdk/compare/v0.1.13...v0.1.14
