@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.18] - 2025-01-14
+
+### Added
+
+- Configurable `recursionLimit` parameter for LangGraph execution to prevent `GraphRecursionError`
+- Default recursion limit increased from 25 (LangGraph default) to 40 for complex multi-tool workflows
+- `recursionLimit` can be overridden via `config.recursionLimit` in both `invokeGraph()` and `streamGraph()` methods
+
+### Fixed
+
+- Fixed `GraphRecursionError: Recursion limit of 25 reached without hitting a stop condition` that occurred during complex agent workflows with many tool calls
+
 ## [0.1.17] - 2025-12-10
 
 ### Fixed

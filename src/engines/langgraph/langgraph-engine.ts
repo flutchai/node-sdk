@@ -3,6 +3,13 @@ import { IGraphEngine } from "../../core";
 import { EventProcessor } from "./event-processor.utils";
 import { ConfigService } from "@nestjs/config";
 /**
+ * Default recursion limit for LangGraph execution.
+ * Prevents infinite loops in agent execution.
+ * LangGraph default is 25, we use 40 for complex multi-tool workflows.
+ */
+const DEFAULT_RECURSION_LIMIT = 40;
+
+/**
  * Graph engine implemented using LangGraph.js
  */
 
@@ -33,8 +40,12 @@ export class LangGraphEngine implements IGraphEngine {
       config.signal = signal;
     }
 
-    // Invoke the graph
-    const result = await graph.invoke(config.input || {}, config);
+    // Invoke the graph with recursion limit to prevent infinite loops
+    const recursionLimit = config.recursionLimit ?? DEFAULT_RECURSION_LIMIT;
+    const result = await graph.invoke(config.input || {}, {
+      ...config,
+      recursionLimit,
+    });
 
     // Transform the result
     return this.processGraphResult(result);
@@ -55,9 +66,11 @@ export class LangGraphEngine implements IGraphEngine {
         config.signal = signal;
       }
       //TODO: migrate to v.1
+      const recursionLimit = config.recursionLimit ?? DEFAULT_RECURSION_LIMIT;
       const eventStream = await graph.streamEvents(config.input || {}, {
         ...config,
         version: "v2", // Important for correct operation
+        recursionLimit, // Prevent GraphRecursionError (default is 25)
       });
 
       // Process the event stream
