@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.21] - 2026-01-22
+
+### Added
+
+- **Comprehensive Examples**: Added 8 working examples demonstrating all major SDK features:
+  - `01-basic-graph` - Minimal graph setup with `AbstractGraphBuilder` and `UniversalGraphModule`
+  - `02-chat-agent` - Conversational AI with OpenAI integration and message history
+  - `03-rag-agent` - Retrieval-Augmented Generation pipeline with document retrieval
+  - `04-tool-calling` - Agent with tool calling using `DynamicStructuredTool` and `ToolNode`
+  - `05-callbacks` - Interactive callbacks with `@Callback` and `@WithCallbacks` decorators
+  - `06-streaming` - Real-time SSE streaming responses
+  - `07-multi-llm` - Multi-provider support (OpenAI, Anthropic, Mistral)
+  - `08-mcp-tools` - MCP (Model Context Protocol) tool integration
+
+### Documentation
+
+- Each example includes README with usage instructions, API examples, and key concepts
+- Added main `examples/README.md` with overview, learning path, and common patterns
+- Added `docker-compose.yml` to all examples for easy Redis setup
+
 ## [0.1.20] - 2026-01-22
 
 ### Added
@@ -232,7 +252,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.20...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.21...HEAD
+[0.1.21]: https://github.com/flutchai/node-sdk/compare/v0.1.20...v0.1.21
 [0.1.20]: https://github.com/flutchai/node-sdk/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/flutchai/node-sdk/compare/v0.1.17...v0.1.19
 [0.1.17]: https://github.com/flutchai/node-sdk/compare/v0.1.16...v0.1.17
