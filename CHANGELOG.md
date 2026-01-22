@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.20] - 2026-01-22
+
+### Added
+
+- **Goal Tracking Support**: Added `threadId` to tool execution context to enable goal tracking in MCP Runtime
+- `IToolExecutionContext` interface now includes optional `threadId` field
+- `McpConverter` now extracts `thread_id`, `agentId`, and `userId` from `RunnableConfig.configurable` and passes them as context to MCP Runtime
+- Unit tests for context extraction in `McpConverter` (13 new test cases)
+
+### Changed
+
+- `McpConverter.convertTool()` now accepts `RunnableConfig` parameter in the tool function to access graph configurable
+- `mcp-tool-filter.ts` updated to support context passing in tool execution
+
+### Related
+
+- Closes flutchai/flutch#548
+- Required for goal tracking feature (MCP Runtime PR #547)
+
 ## [0.1.19] - 2025-01-14
 
 ### Added
@@ -213,7 +232,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.19...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.20...HEAD
+[0.1.20]: https://github.com/flutchai/node-sdk/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/flutchai/node-sdk/compare/v0.1.17...v0.1.19
 [0.1.17]: https://github.com/flutchai/node-sdk/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/flutchai/node-sdk/compare/v0.1.14...v0.1.16

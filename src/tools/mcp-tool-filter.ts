@@ -68,15 +68,17 @@ export class McpToolFilter {
       );
 
       // Create a simple MCP client for tool execution
+      // Note: context is passed via McpConverter which extracts it from RunnableConfig
       const mcpClient: McpRuntimeClient = {
         getTools: async () => dynamicTools,
-        executeTool: async (name: string, args: any) => {
+        executeTool: async (name: string, args: any, context?: any) => {
           this.logger.debug(`[DEBUG] Executing tool ${name} with args:`, args);
           const response = await axios.post(
             `${this.mcpRuntimeUrl}/tools/execute`,
             {
               name,
               arguments: args || {},
+              context,
             }
           );
           return response.data;
@@ -128,12 +130,13 @@ export class McpToolFilter {
 
       const mcpClient: McpRuntimeClient = {
         getTools: async () => allTools,
-        executeTool: async (name: string, args: any) => {
+        executeTool: async (name: string, args: any, context?: any) => {
           const response = await axios.post(
             `${this.mcpRuntimeUrl}/tools/execute`,
             {
               name,
               arguments: args || {},
+              context,
             }
           );
           return response.data;
