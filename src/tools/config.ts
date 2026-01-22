@@ -60,4 +60,6 @@ export interface IToolExecutionContext {
   agentId: string;
   /** User ID */
   userId: string;
+  /** Thread ID for goal tracking */
+  threadId?: string;
 }

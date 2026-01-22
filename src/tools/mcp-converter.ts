@@ -1,13 +1,20 @@
 import { DynamicStructuredTool, StructuredTool } from "@langchain/core/tools";
+import { RunnableConfig } from "@langchain/core/runnables";
 import { z } from "zod";
 import axios from "axios";
 import { Logger } from "@nestjs/common";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { McpTool } from "./mcp.interfaces";
+import { IGraphConfigurable } from "../graph/graph-types";
 
 interface ToolExecutionRequest {
   name: string;
   arguments: Record<string, any>;
+  context?: {
+    agentId?: string;
+    userId?: string;
+    threadId?: string;
+  };
 }
 
 interface ToolExecutionResult {
@@ -197,13 +204,32 @@ export class McpConverter {
       name: mcpTool.name,
       description: enhancedDescription,
       schema,
-      func: async (input: Record<string, any>): Promise<string> => {
+      func: async (
+        input: Record<string, any>,
+        _runManager,
+        config?: RunnableConfig
+      ): Promise<string> => {
         logger.log(`🔧 [${mcpTool.name}] LLM INPUT: ${JSON.stringify(input)}`);
+
+        // Extract context from RunnableConfig.configurable
+        const configurable = config?.configurable as
+          | IGraphConfigurable
+          | undefined;
+        const context = {
+          agentId: configurable?.agentId,
+          userId: configurable?.userId,
+          threadId: configurable?.thread_id,
+        };
+
+        logger.debug(
+          `🔧 [${mcpTool.name}] Execution context: ${JSON.stringify(context)}`
+        );
 
         try {
           const request: ToolExecutionRequest = {
             name: mcpTool.name,
             arguments: input ?? {},
+            context,
           };
 
           logger.log(`🔧 [${mcpTool.name}] Calling MCP Runtime...`);
