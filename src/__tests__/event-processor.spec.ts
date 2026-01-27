@@ -474,6 +474,316 @@ describe("EventProcessor", () => {
     });
   });
 
+  describe("processEvent - normalizeContentBlocks (via processEvent)", () => {
+    it("should handle string content by wrapping in text block", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(acc, {
+        event: "on_chat_model_stream",
+        data: { chunk: { content: "plain string" } },
+        metadata: {
+          stream_channel: StreamChannel.TEXT,
+          langgraph_node: "agent",
+        },
+      });
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.currentBlock).toEqual(
+        expect.objectContaining({ type: "text", text: "plain string" })
+      );
+    });
+
+    it("should handle empty string content", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(acc, {
+        event: "on_chat_model_stream",
+        data: { chunk: { content: "   " } },
+        metadata: {
+          stream_channel: StreamChannel.TEXT,
+          langgraph_node: "agent",
+        },
+      });
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.currentBlock).toBeNull();
+    });
+
+    it("should handle single object content", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(acc, {
+        event: "on_chat_model_stream",
+        data: { chunk: { content: { type: "text", text: "object" } } },
+        metadata: {
+          stream_channel: StreamChannel.TEXT,
+          langgraph_node: "agent",
+        },
+      });
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.currentBlock).toEqual(
+        expect.objectContaining({ type: "text", text: "object" })
+      );
+    });
+
+    it("should handle null/undefined content", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(acc, {
+        event: "on_chat_model_stream",
+        data: { chunk: { content: null } },
+        metadata: {
+          stream_channel: StreamChannel.TEXT,
+          langgraph_node: "agent",
+        },
+      });
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.currentBlock).toBeNull();
+    });
+
+    it("should handle tool_call type (LangChain format)", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          { type: "tool_call", id: "call_1", name: "my_tool", input: "" },
+        ])
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.currentBlock).toEqual(
+        expect.objectContaining({
+          type: "tool_use",
+          name: "my_tool",
+          id: "call_1",
+        })
+      );
+    });
+  });
+
+  describe("processEvent - on_chain_end", () => {
+    it("should extract attachments from answer format", () => {
+      const acc = createAccumulator();
+      const attachment = { type: "file", url: "https://example.com/file.pdf" };
+
+      processor.processEvent(acc, {
+        event: "on_chain_end",
+        data: {
+          output: {
+            answer: {
+              attachments: [attachment],
+              metadata: { source: "test" },
+            },
+          },
+        },
+        metadata: {
+          stream_channel: StreamChannel.TEXT,
+          langgraph_node: "agent",
+        },
+      });
+
+      expect(acc.attachments).toHaveLength(1);
+      expect(acc.attachments[0]).toEqual(attachment);
+      expect(acc.metadata).toEqual({ source: "test" });
+    });
+
+    it("should extract attachments from generation format", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(acc, {
+        event: "on_chain_end",
+        data: {
+          output: {
+            generation: {
+              attachments: [{ type: "image", url: "img.png" }],
+              metadata: { model: "gpt-4" },
+            },
+          },
+        },
+        metadata: {
+          stream_channel: StreamChannel.TEXT,
+          langgraph_node: "agent",
+        },
+      });
+
+      expect(acc.attachments).toHaveLength(1);
+      expect(acc.metadata.model).toBe("gpt-4");
+    });
+
+    it("should extract attachments from flat output format", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(acc, {
+        event: "on_chain_end",
+        data: {
+          output: {
+            attachments: [{ type: "doc" }],
+            metadata: { key: "value" },
+          },
+        },
+        metadata: {
+          stream_channel: StreamChannel.TEXT,
+          langgraph_node: "agent",
+        },
+      });
+
+      expect(acc.attachments).toHaveLength(1);
+      expect(acc.metadata.key).toBe("value");
+    });
+
+    it("should merge attachments from multiple on_chain_end events", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(acc, {
+        event: "on_chain_end",
+        data: {
+          output: { answer: { attachments: [{ id: 1 }], metadata: {} } },
+        },
+        metadata: {
+          stream_channel: StreamChannel.TEXT,
+          langgraph_node: "node1",
+        },
+      });
+
+      processor.processEvent(acc, {
+        event: "on_chain_end",
+        data: {
+          output: { answer: { attachments: [{ id: 2 }], metadata: {} } },
+        },
+        metadata: {
+          stream_channel: StreamChannel.TEXT,
+          langgraph_node: "node2",
+        },
+      });
+
+      expect(acc.attachments).toHaveLength(2);
+    });
+
+    it("should ignore on_chain_end from non-TEXT channels", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(acc, {
+        event: "on_chain_end",
+        data: {
+          output: { answer: { attachments: [{ id: 1 }], metadata: {} } },
+        },
+        metadata: {
+          stream_channel: StreamChannel.PROCESSING,
+          langgraph_node: "agent",
+        },
+      });
+
+      expect(acc.attachments).toHaveLength(0);
+    });
+  });
+
+  describe("processEvent - on_chat_model_end", () => {
+    it("should not crash on on_chat_model_end", () => {
+      const acc = createAccumulator();
+
+      expect(() => {
+        processor.processEvent(acc, {
+          event: "on_chat_model_end",
+          name: "ChatOpenAI",
+          metadata: { langgraph_node: "agent", stream_channel: "text" },
+          data: { output: { content: "done" } },
+        });
+      }).not.toThrow();
+    });
+  });
+
+  describe("processEvent - trace event capture", () => {
+    it("should capture on_tool_start as trace event", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(acc, toolStartEvent("search", "run-1"));
+
+      expect(acc.traceEvents.length).toBeGreaterThan(0);
+      const toolTrace = acc.traceEvents.find(e => e.type === "on_tool_start");
+      expect(toolTrace).toBeDefined();
+      expect(toolTrace!.name).toBe("search");
+    });
+
+    it("should skip on_chat_model_stream from trace events", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([{ type: "text", text: "hi" }])
+      );
+
+      const streamTraces = acc.traceEvents.filter(
+        e => e.type === "on_chat_model_stream"
+      );
+      expect(streamTraces).toHaveLength(0);
+    });
+
+    it("should skip LangGraph infrastructure events", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(acc, {
+        event: "on_chain_start",
+        name: "ChannelWrite<messages,agent>",
+        metadata: { langgraph_node: "agent" },
+        data: {},
+      });
+
+      const infraTraces = acc.traceEvents.filter(e =>
+        e.name?.includes("ChannelWrite")
+      );
+      expect(infraTraces).toHaveLength(0);
+    });
+
+    it("should skip top-level chain events without langgraph_node", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(acc, {
+        event: "on_chain_end",
+        name: "LangGraph",
+        metadata: {},
+        data: { output: {} },
+      });
+
+      const chainTraces = acc.traceEvents.filter(
+        e => e.type === "on_chain_end"
+      );
+      expect(chainTraces).toHaveLength(0);
+    });
+  });
+
+  describe("processEvent - default channel", () => {
+    it("should default to TEXT channel when stream_channel is not set", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(acc, {
+        event: "on_chat_model_stream",
+        data: { chunk: { content: [{ type: "text", text: "no channel" }] } },
+        metadata: { langgraph_node: "agent" },
+      });
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.currentBlock).toEqual(
+        expect.objectContaining({ type: "text", text: "no channel" })
+      );
+    });
+  });
+
+  describe("processEvent - sendDelta without onPartial", () => {
+    it("should not crash when onPartial is not provided", () => {
+      const acc = createAccumulator();
+
+      expect(() => {
+        processor.processEvent(
+          acc,
+          chatModelStreamEvent([{ type: "text", text: "hi" }])
+        );
+      }).not.toThrow();
+    });
+  });
+
   describe("getResult", () => {
     it("should finalize currentBlock into contentChain", () => {
       const acc = createAccumulator();
@@ -542,6 +852,71 @@ describe("EventProcessor", () => {
       );
 
       const result = processor.getResult(acc);
+      expect(result.content.text).toBe("");
+    });
+
+    it("should return trace data when trace events exist", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(acc, toolStartEvent("search", "run-1"));
+      processor.processEvent(acc, toolErrorEvent("search", "run-1", "fail"));
+
+      const result = processor.getResult(acc);
+      expect(result.trace).not.toBeNull();
+      expect(result.trace!.events.length).toBeGreaterThan(0);
+      expect(result.trace!.totalEvents).toBe(result.trace!.events.length);
+    });
+
+    it("should return null trace when no trace events exist", () => {
+      const acc = createAccumulator();
+
+      // Only text streaming — on_chat_model_stream is skipped in trace
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([{ type: "text", text: "hi" }])
+      );
+
+      const result = processor.getResult(acc);
+      expect(result.trace).toBeNull();
+    });
+
+    it("should include both TEXT and PROCESSING chains", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent(
+          [{ type: "text", text: "visible" }],
+          StreamChannel.TEXT
+        )
+      );
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent(
+          [{ type: "text", text: "thinking" }],
+          StreamChannel.PROCESSING
+        )
+      );
+
+      const result = processor.getResult(acc);
+      expect(result.content.contentChains).toHaveLength(2);
+
+      const textChain = result.content.contentChains!.find(
+        c => c.channel === "text"
+      );
+      const procChain = result.content.contentChains!.find(
+        c => c.channel === "processing"
+      );
+
+      expect(textChain!.steps[0].text).toBe("visible");
+      expect(procChain!.steps[0].text).toBe("thinking");
+    });
+
+    it("should return empty contentChains when no blocks exist", () => {
+      const acc = createAccumulator();
+
+      const result = processor.getResult(acc);
+      expect(result.content.contentChains).toBeUndefined();
       expect(result.content.text).toBe("");
     });
   });
