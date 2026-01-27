@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.23] - 2026-01-27
+
+### Fixed
+
+- Removed temporary debug logging (`[DELTA]`, `[on_tool_end]`) from EventProcessor
+
+### Added
+
+- **Increased test coverage**: 33 new tests for `EventProcessor` (normalizeContentBlocks, on_chain_end, trace capture, getResult) and `sanitizeTraceData` (primitives, circular refs, depth limits, Set/Map)
+- EventProcessor coverage: 71% → 85%, api-call-tracer: 0% → 65%
+
 ## [0.1.22] - 2026-01-27
 
 ### Fixed
