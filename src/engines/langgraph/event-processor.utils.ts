@@ -124,17 +124,6 @@ export class EventProcessor {
   ): void {
     if (!onPartial) return;
 
-    // Debug: log tool-related deltas
-    if (
-      delta.type === "step_started" ||
-      delta.type === "tool_output_chunk" ||
-      delta.type === "tool_input_chunk"
-    ) {
-      this.logger.debug(
-        `[DELTA] type=${delta.type} channel=${channel} stepId=${delta.stepId || delta.step?.id} name=${delta.step?.name || "N/A"}`
-      );
-    }
-
     onPartial(
       JSON.stringify({
         channel,
@@ -332,9 +321,6 @@ export class EventProcessor {
 
       // Find the correct tool block from the pending queue (FIFO order)
       // Tools execute sequentially, so the first pending block matches the first on_tool_end
-      this.logger.debug(
-        `[on_tool_end] channel=${channel} pendingCount=${state.pendingToolBlocks.length} pendingIds=${state.pendingToolBlocks.map(b => b.id).join(",")} currentBlock=${state.currentBlock?.id}`
-      );
       const toolBlock = state.pendingToolBlocks.shift();
 
       if (toolBlock && toolBlock.type === "tool_use") {
