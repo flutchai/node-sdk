@@ -31,6 +31,7 @@ export interface LLMCallRecord {
 export interface ChannelState {
   contentChain: IContentBlock[]; // Accumulated blocks for the chain
   currentBlock: IContentBlock | null; // Block currently being streamed
+  pendingToolBlocks: IContentBlock[]; // Tool blocks awaiting on_tool_end output (FIFO queue)
 }
 
 /**
@@ -63,8 +64,14 @@ export class EventProcessor {
   createAccumulator(): StreamAccumulator {
     return {
       channels: new Map([
-        [StreamChannel.TEXT, { contentChain: [], currentBlock: null }],
-        [StreamChannel.PROCESSING, { contentChain: [], currentBlock: null }],
+        [
+          StreamChannel.TEXT,
+          { contentChain: [], currentBlock: null, pendingToolBlocks: [] },
+        ],
+        [
+          StreamChannel.PROCESSING,
+          { contentChain: [], currentBlock: null, pendingToolBlocks: [] },
+        ],
       ]),
       attachments: [],
       metadata: {},
@@ -117,6 +124,17 @@ export class EventProcessor {
   ): void {
     if (!onPartial) return;
 
+    // Debug: log tool-related deltas
+    if (
+      delta.type === "step_started" ||
+      delta.type === "tool_output_chunk" ||
+      delta.type === "tool_input_chunk"
+    ) {
+      this.logger.debug(
+        `[DELTA] type=${delta.type} channel=${channel} stepId=${delta.stepId || delta.step?.id} name=${delta.step?.name || "N/A"}`
+      );
+    }
+
     onPartial(
       JSON.stringify({
         channel,
@@ -152,6 +170,9 @@ export class EventProcessor {
           input: block.input || "",
           output: "",
         };
+
+        // Track this tool block for matching with on_tool_end
+        state.pendingToolBlocks.push(state.currentBlock);
 
         // Send delta
         this.sendDelta(
@@ -307,20 +328,29 @@ export class EventProcessor {
         (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
       const state = acc.channels.get(channel);
 
-      if (state?.currentBlock && state.currentBlock.type === "tool_use") {
+      if (!state) return;
+
+      // Find the correct tool block from the pending queue (FIFO order)
+      // Tools execute sequentially, so the first pending block matches the first on_tool_end
+      this.logger.debug(
+        `[on_tool_end] channel=${channel} pendingCount=${state.pendingToolBlocks.length} pendingIds=${state.pendingToolBlocks.map(b => b.id).join(",")} currentBlock=${state.currentBlock?.id}`
+      );
+      const toolBlock = state.pendingToolBlocks.shift();
+
+      if (toolBlock && toolBlock.type === "tool_use") {
         // Set tool OUTPUT (result of execution)
         const output = event.data?.output;
         const outputString =
           typeof output === "string" ? output : JSON.stringify(output, null, 2);
 
-        state.currentBlock.output = outputString;
+        toolBlock.output = outputString;
 
-        // Send delta with tool output
+        // Send delta with correct tool block id
         this.sendDelta(
           channel,
           {
             type: "tool_output_chunk",
-            stepId: state.currentBlock.id,
+            stepId: toolBlock.id,
             chunk: outputString,
           },
           onPartial
@@ -328,11 +358,21 @@ export class EventProcessor {
 
         this.logger.log("✅ Tool execution completed", {
           toolName: event.name,
+          toolBlockId: toolBlock.id,
           outputPreview:
             outputString.substring(0, 200) +
             (outputString.length > 200 ? "..." : ""),
           runId: event.run_id,
         });
+      } else {
+        this.logger.warn(
+          "⚠️ on_tool_end received but no pending tool block found",
+          {
+            toolName: event.name,
+            runId: event.run_id,
+            pendingCount: state.pendingToolBlocks.length,
+          }
+        );
       }
       return;
     }
