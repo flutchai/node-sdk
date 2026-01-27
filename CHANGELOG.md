@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.22] - 2026-01-27
+
+### Fixed
+
+- **Tool block matching in EventProcessor**: Fixed `on_tool_end` assigning output to wrong tool block when multiple tools are streamed sequentially. Added `pendingToolBlocks` FIFO queue to correctly match tool outputs by order of creation instead of relying on `currentBlock`
+- Added warning log when `on_tool_end` arrives without a matching pending tool block
+
+### Added
+
+- **EventProcessor unit tests**: 21 test cases covering text streaming, single/multi tool lifecycle, channel routing, JSON serialization, edge cases, and `getResult` finalization
+- **CI coverage reporting**: PR checks now run tests with `--coverage` and post a coverage summary comment to the PR
+
 ## [0.1.21] - 2026-01-22
 
 ### Added

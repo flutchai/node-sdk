@@ -9,6 +9,10 @@ on:
 env:
   NODE_VERSION: "20"
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   pr-checks:
     if: github.event.pull_request.draft == false
@@ -50,8 +54,51 @@ jobs:
             echo "✅ Code is properly formatted."
           fi
 
-      - name: Run tests
-        run: yarn test
+      - name: Run tests with coverage
+        run: yarn test --coverage
+
+      - name: Post coverage summary to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = JSON.parse(fs.readFileSync('coverage/coverage-summary.json', 'utf8'));
+            const total = summary.total;
+            const fmt = (pct) => `${pct.pct.toFixed(1)}%`;
+            const body = [
+              '## 📊 Test Coverage',
+              '',
+              '| Metric | Coverage |',
+              '|--------|----------|',
+              `| Statements | ${fmt(total.statements)} |`,
+              `| Branches | ${fmt(total.branches)} |`,
+              `| Functions | ${fmt(total.functions)} |`,
+              `| Lines | ${fmt(total.lines)} |`,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.includes('## 📊 Test Coverage'));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
 
       - name: Build SDK
         run: yarn build
