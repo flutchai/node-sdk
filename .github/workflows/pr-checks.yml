@@ -9,6 +9,10 @@ on:
 env:
   NODE_VERSION: "20"
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   pr-checks:
     if: github.event.pull_request.draft == false
