@@ -1,6 +1,13 @@
-import { randomBytes } from "crypto";
 import type Redis from "ioredis";
 import { CallbackEntry, CallbackRecord } from "./callback.interface";
+import {
+  generateCallbackToken,
+  createCallbackRecord,
+  resolveCallbackTTL,
+  parseCallbackRecord,
+  markAsFailed,
+  markAsPending,
+} from "./callback-store.logic";
 
 /**
  * CallbackStore manages callback tokens and their lifecycle.
@@ -22,26 +29,13 @@ export class CallbackStore {
     this.isProduction = process.env.NODE_ENV === "production";
   }
 
-  private generateToken(graphType: string): string {
-    // Use :: as separator since it's not used in base64url
-    // Format: cb::{graphType}::{random}
-    // 8 bytes = 64 bits of entropy, practically collision-free for short-lived tokens
-    return `cb::${graphType}::${randomBytes(8).toString("base64url")}`;
-  }
-
   /**
    * Issues a new callback token and persists its payload.
    */
   async issue(entry: CallbackEntry): Promise<string> {
-    const token = this.generateToken(entry.graphType);
-    const record: CallbackRecord = {
-      ...entry,
-      token,
-      status: "pending",
-      createdAt: Date.now(),
-      retries: 0,
-    };
-    const ttl = entry.metadata?.ttlSec ?? 600; // default 10 minutes
+    const token = generateCallbackToken(entry.graphType);
+    const record = createCallbackRecord(entry, token, Date.now());
+    const ttl = resolveCallbackTTL(entry);
     await this.redis.setex(`callback:${token}`, ttl, JSON.stringify(record));
     return token;
   }
@@ -58,7 +52,9 @@ export class CallbackStore {
   }
 
   /**
-   * Production version with Lua script for atomicity
+   * Production version: uses Redis Lua scripting for atomic get-and-lock.
+   * NOTE: redis.eval() here executes a Lua script on the Redis server,
+   * NOT JavaScript eval(). This is the standard ioredis API for Lua scripting.
    */
   private async getAndLockAtomic(
     token: string
@@ -89,22 +85,21 @@ export class CallbackStore {
       return null;
     }
 
-    try {
-      const record = JSON.parse(data) as CallbackRecord;
-
-      if (record.status !== "pending") {
-        return null;
-      }
-
-      // Update status to processing
-      record.status = "processing";
-      await this.redis.set(key, JSON.stringify(record));
-
-      return record;
-    } catch (error) {
-      console.error("Failed to parse callback record:", error);
+    const record = parseCallbackRecord(data);
+    if (!record) {
+      console.error("Failed to parse callback record");
       return null;
     }
+
+    if (record.status !== "pending") {
+      return null;
+    }
+
+    // Update status to processing
+    record.status = "processing";
+    await this.redis.set(key, JSON.stringify(record));
+
+    return record;
   }
 
   /**
@@ -126,7 +121,8 @@ export class CallbackStore {
   }
 
   /**
-   * Production version with Lua script for atomicity
+   * Production version: uses Redis Lua scripting for atomic fail.
+   * NOTE: redis.eval() here executes a Lua script on the Redis server.
    */
   private async failAtomic(
     token: string,
@@ -160,18 +156,15 @@ export class CallbackStore {
       return null;
     }
 
-    try {
-      const record = JSON.parse(data) as CallbackRecord;
-      record.status = "failed";
-      record.retries = (record.retries || 0) + 1;
-      record.lastError = error;
-
-      await this.redis.set(key, JSON.stringify(record));
-      return record;
-    } catch (parseError) {
-      console.error("Failed to parse callback record:", parseError);
+    const record = parseCallbackRecord(data);
+    if (!record) {
+      console.error("Failed to parse callback record");
       return null;
     }
+
+    const updated = markAsFailed(record, error);
+    await this.redis.set(key, JSON.stringify(updated));
+    return updated;
   }
 
   /**
@@ -186,7 +179,8 @@ export class CallbackStore {
   }
 
   /**
-   * Production version with Lua script for atomicity
+   * Production version: uses Redis Lua scripting for atomic retry.
+   * NOTE: redis.eval() here executes a Lua script on the Redis server.
    */
   private async retryAtomic(token: string): Promise<CallbackRecord | null> {
     const script = `
@@ -212,15 +206,14 @@ export class CallbackStore {
       return null;
     }
 
-    try {
-      const record = JSON.parse(data) as CallbackRecord;
-      record.status = "pending";
-
-      await this.redis.set(key, JSON.stringify(record));
-      return record;
-    } catch (parseError) {
-      console.error("Failed to parse callback record:", parseError);
+    const record = parseCallbackRecord(data);
+    if (!record) {
+      console.error("Failed to parse callback record");
       return null;
     }
+
+    const updated = markAsPending(record);
+    await this.redis.set(key, JSON.stringify(updated));
+    return updated;
   }
 }

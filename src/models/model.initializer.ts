@@ -11,7 +11,12 @@ import { AIMessageChunk } from "@langchain/core/messages";
 import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
 import { McpToolFilter } from "../tools/mcp-tool-filter";
 import { IAgentToolConfig } from "../tools/config";
-import { createHash } from "crypto";
+import {
+  isReasoningModel,
+  hashToolsConfig as hashToolsConfigPure,
+  generateModelCacheKey as generateModelCacheKeyPure,
+  buildOpenAIModelConfig,
+} from "./model.logic";
 
 // WORKAROUND: Temporary monkey patch for GPT-5 support in LangChain
 // LangChain doesn't yet recognize GPT-5 as a reasoning model and has issues:
@@ -400,14 +405,7 @@ export class ModelInitializer implements IModelInitializer {
    * Uses MD5 hash to create short, unique identifier
    */
   private hashToolsConfig(toolsConfig: IAgentToolConfig[]): string {
-    // Sort by toolName to ensure consistent hash for same config
-    const sorted = toolsConfig
-      .map(t => `${t.toolName}:${t.enabled}:${JSON.stringify(t.config || {})}`)
-      .sort()
-      .join("|");
-
-    // Generate short MD5 hash (16 chars)
-    return createHash("md5").update(sorted).digest("hex").slice(0, 16);
+    return hashToolsConfigPure(toolsConfig);
   }
 
   /**
@@ -416,19 +414,12 @@ export class ModelInitializer implements IModelInitializer {
    * Example: "model123:0.7:4096" or "model123:0.7:4096:a1b2c3d4e5f6g7h8"
    */
   private generateModelCacheKey(config: ModelByIdConfig): string {
-    const parts = [
+    return generateModelCacheKeyPure(
       config.modelId,
-      config.temperature ?? "default",
-      config.maxTokens ?? "default",
-    ];
-
-    // Add tools hash if toolsConfig provided
-    if (config.toolsConfig && config.toolsConfig.length > 0) {
-      const toolsHash = this.hashToolsConfig(config.toolsConfig);
-      parts.push(toolsHash);
-    }
-
-    return parts.join(":");
+      config.temperature,
+      config.maxTokens,
+      config.toolsConfig
+    );
   }
 
   /**
@@ -446,30 +437,11 @@ export class ModelInitializer implements IModelInitializer {
    * @returns true if model requires maxCompletionTokens and temperature = 1
    */
   private requiresMaxCompletionTokens(modelName: string): boolean {
-    const requiresNew =
-      modelName.includes("gpt-5") ||
-      modelName.includes("gpt-o1") ||
-      modelName.includes("gpt-o2") ||
-      modelName.includes("gpt-o3") ||
-      modelName.includes("gpt-o4") ||
-      // Add other patterns as new models are released
-      /^gpt-(5|6|7|8|9)/.test(modelName) ||
-      /^gpt-o[1-4]/.test(modelName);
-
+    const requiresNew = isReasoningModel(modelName);
     this.logger.debug(`Checking token parameter for model "${modelName}"`, {
       modelName,
       requiresMaxCompletionTokens: requiresNew,
-      checks: {
-        includesGpt5: modelName.includes("gpt-5"),
-        includesO1: modelName.includes("gpt-o1"),
-        includesO2: modelName.includes("gpt-o2"),
-        includesO3: modelName.includes("gpt-o3"),
-        includesO4: modelName.includes("gpt-o4"),
-        regexGpt5Plus: /^gpt-(5|6|7|8|9)/.test(modelName),
-        regexO1to4: /^gpt-o[1-4]/.test(modelName),
-      },
     });
-
     return requiresNew;
   }
 
