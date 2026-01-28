@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.25] - 2026-01-28
+
+### Changed
+
+- Extract pure business logic from `CallbackStore`, `ModelInitializer`, and `AbstractGraphBuilder` into dedicated `.logic.ts` files
+- Services now delegate to pure functions, reducing coupling and improving testability
+
+### Added
+
+- `callback-store.logic.ts` — 7 pure functions (token generation, record lifecycle)
+- `model.logic.ts` — 4 pure functions (reasoning model detection, cache key, config building)
+- `graph.logic.ts` — 4 pure functions (graph type, semver validation, callback token parsing)
+- Mock-free unit tests for all logic files
+
 ## [0.1.24] - 2026-01-28
 
 ### Changed
