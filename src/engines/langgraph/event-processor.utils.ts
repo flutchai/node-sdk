@@ -31,7 +31,8 @@ export interface LLMCallRecord {
 export interface ChannelState {
   contentChain: IContentBlock[]; // Accumulated blocks for the chain
   currentBlock: IContentBlock | null; // Block currently being streamed
-  pendingToolBlocks: IContentBlock[]; // Tool blocks awaiting on_tool_end output (FIFO queue)
+  pendingToolBlocks: IContentBlock[]; // Tool blocks not yet matched to a run_id
+  toolBlocksByRunId: Map<string, IContentBlock>; // run_id → matched tool block
 }
 
 /**
@@ -66,11 +67,21 @@ export class EventProcessor {
       channels: new Map([
         [
           StreamChannel.TEXT,
-          { contentChain: [], currentBlock: null, pendingToolBlocks: [] },
+          {
+            contentChain: [],
+            currentBlock: null,
+            pendingToolBlocks: [],
+            toolBlocksByRunId: new Map(),
+          },
         ],
         [
           StreamChannel.PROCESSING,
-          { contentChain: [], currentBlock: null, pendingToolBlocks: [] },
+          {
+            contentChain: [],
+            currentBlock: null,
+            pendingToolBlocks: [],
+            toolBlocksByRunId: new Map(),
+          },
         ],
       ]),
       attachments: [],
@@ -303,11 +314,22 @@ export class EventProcessor {
 
     // 3. Tool events: log tool execution lifecycle
     if (event.event === "on_tool_start") {
+      const channel =
+        (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
+      const state = acc.channels.get(channel);
+      if (state && event.run_id) {
+        // Find first pending block matching tool name and move to run_id map
+        const idx = state.pendingToolBlocks.findIndex(
+          b => b.name === event.name
+        );
+        if (idx !== -1) {
+          const block = state.pendingToolBlocks.splice(idx, 1)[0];
+          state.toolBlocksByRunId.set(event.run_id, block);
+        }
+      }
       this.logger.log("🔧 Tool execution started", {
         toolName: event.name,
-        input: event.data?.input,
         runId: event.run_id,
-        metadata: event.metadata,
       });
       return;
     }
@@ -319,19 +341,22 @@ export class EventProcessor {
 
       if (!state) return;
 
-      // Find the correct tool block from the pending queue (FIFO order)
-      // Tools execute sequentially, so the first pending block matches the first on_tool_end
-      const toolBlock = state.pendingToolBlocks.shift();
+      // Prefer run_id lookup, fallback to FIFO for backwards compatibility
+      let toolBlock: IContentBlock | undefined;
+      if (event.run_id && state.toolBlocksByRunId.has(event.run_id)) {
+        toolBlock = state.toolBlocksByRunId.get(event.run_id);
+        state.toolBlocksByRunId.delete(event.run_id);
+      } else {
+        toolBlock = state.pendingToolBlocks.shift();
+      }
 
       if (toolBlock && toolBlock.type === "tool_use") {
-        // Set tool OUTPUT (result of execution)
         const output = event.data?.output;
         const outputString =
           typeof output === "string" ? output : JSON.stringify(output, null, 2);
 
         toolBlock.output = outputString;
 
-        // Send delta with correct tool block id
         this.sendDelta(
           channel,
           {
@@ -342,29 +367,28 @@ export class EventProcessor {
           onPartial
         );
 
-        this.logger.log("✅ Tool execution completed", {
+        this.logger.log("✅ Tool completed", {
           toolName: event.name,
           toolBlockId: toolBlock.id,
-          outputPreview:
-            outputString.substring(0, 200) +
-            (outputString.length > 200 ? "..." : ""),
           runId: event.run_id,
         });
       } else {
-        this.logger.warn(
-          "⚠️ on_tool_end received but no pending tool block found",
-          {
-            toolName: event.name,
-            runId: event.run_id,
-            pendingCount: state.pendingToolBlocks.length,
-          }
-        );
+        this.logger.warn("⚠️ on_tool_end: no matching tool block", {
+          toolName: event.name,
+          runId: event.run_id,
+        });
       }
       return;
     }
 
     if (event.event === "on_tool_error") {
-      this.logger.error("❌ Tool execution failed", {
+      const channel =
+        (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
+      const state = acc.channels.get(channel);
+      if (state && event.run_id) {
+        state.toolBlocksByRunId.delete(event.run_id);
+      }
+      this.logger.error("❌ Tool failed", {
         toolName: event.name,
         error: event.data?.error,
         runId: event.run_id,
@@ -434,6 +458,18 @@ export class EventProcessor {
     const allChains: IContentChain[] = [];
 
     for (const [channel, state] of acc.channels.entries()) {
+      // Safety net: warn about orphaned tool blocks that were never resolved
+      if (
+        state.pendingToolBlocks.length > 0 ||
+        state.toolBlocksByRunId.size > 0
+      ) {
+        this.logger.warn("⚠️ Orphaned tool blocks detected at finalization", {
+          channel,
+          pendingCount: state.pendingToolBlocks.length,
+          mappedCount: state.toolBlocksByRunId.size,
+        });
+      }
+
       // Finalize current block if exists
       if (state.currentBlock) {
         state.contentChain.push(state.currentBlock);

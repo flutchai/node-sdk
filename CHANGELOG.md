@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.24] - 2026-01-28
+
+### Changed
+
+- **Production-ready tool block matching**: replaced FIFO queue with `run_id`-keyed Map (`toolBlocksByRunId`) for reliable tool output assignment
+- `on_tool_start` now links `event.run_id` to the correct pending tool block by name
+- `on_tool_end` uses `run_id` lookup with FIFO fallback for backwards compatibility
+- `on_tool_error` now drains the matching tool block from the map (fixes queue desync bug)
+- Safety net in `getResult`: warns about orphaned tool blocks at finalization
+
+### Added
+
+- 7 new tests for `run_id`-based tool block matching (out-of-order completion, error draining, FIFO fallback, orphaned blocks)
+
 ## [0.1.23] - 2026-01-27
 
 ### Fixed
