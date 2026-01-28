@@ -80,13 +80,15 @@ describe("EventProcessor", () => {
       expect(acc.channels.has(StreamChannel.PROCESSING)).toBe(true);
     });
 
-    it("should initialize channel state with empty pendingToolBlocks", () => {
+    it("should initialize channel state with empty pendingToolBlocks and toolBlocksByRunId", () => {
       const acc = createAccumulator();
       const textState = acc.channels.get(StreamChannel.TEXT)!;
 
       expect(textState.contentChain).toEqual([]);
       expect(textState.currentBlock).toBeNull();
       expect(textState.pendingToolBlocks).toEqual([]);
+      expect(textState.toolBlocksByRunId).toBeInstanceOf(Map);
+      expect(textState.toolBlocksByRunId.size).toBe(0);
     });
   });
 
@@ -918,6 +920,219 @@ describe("EventProcessor", () => {
       const result = processor.getResult(acc);
       expect(result.content.contentChains).toBeUndefined();
       expect(result.content.text).toBe("");
+    });
+  });
+
+  describe("run_id-based tool block matching", () => {
+    it("on_tool_start should move pending block to toolBlocksByRunId", () => {
+      const acc = createAccumulator();
+
+      // Stream a tool block
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          { type: "tool_use", id: "toolu_1", name: "get_weather", input: "" },
+        ])
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.pendingToolBlocks).toHaveLength(1);
+      expect(state.toolBlocksByRunId.size).toBe(0);
+
+      // on_tool_start links run_id
+      processor.processEvent(acc, toolStartEvent("get_weather", "run-abc"));
+
+      expect(state.pendingToolBlocks).toHaveLength(0);
+      expect(state.toolBlocksByRunId.size).toBe(1);
+      expect(state.toolBlocksByRunId.get("run-abc")!.id).toBe("toolu_1");
+    });
+
+    it("on_tool_end should use run_id lookup to assign output", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          { type: "tool_use", id: "toolu_1", name: "search", input: "" },
+        ])
+      );
+
+      processor.processEvent(acc, toolStartEvent("search", "run-x1"));
+      processor.processEvent(
+        acc,
+        toolEndEvent("search", "run-x1", "found it"),
+        onPartial
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      // Block should have output assigned
+      expect(state.currentBlock!.output).toBe("found it");
+      // Map should be drained
+      expect(state.toolBlocksByRunId.size).toBe(0);
+      expect(state.pendingToolBlocks).toHaveLength(0);
+    });
+
+    it("on_tool_end should fallback to FIFO when run_id is not in map", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          { type: "tool_use", id: "toolu_1", name: "legacy_tool", input: "" },
+        ])
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.pendingToolBlocks).toHaveLength(1);
+
+      // on_tool_end without prior on_tool_start (no run_id in map)
+      processor.processEvent(
+        acc,
+        toolEndEvent("legacy_tool", "run-unknown", "fallback output")
+      );
+
+      expect(state.pendingToolBlocks).toHaveLength(0);
+      expect(state.currentBlock!.output).toBe("fallback output");
+    });
+
+    it("on_tool_error should drain block from toolBlocksByRunId", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          { type: "tool_use", id: "toolu_1", name: "failing_tool", input: "" },
+        ])
+      );
+
+      processor.processEvent(acc, toolStartEvent("failing_tool", "run-err1"));
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.toolBlocksByRunId.size).toBe(1);
+
+      processor.processEvent(
+        acc,
+        toolErrorEvent("failing_tool", "run-err1", "Connection timeout")
+      );
+
+      expect(state.toolBlocksByRunId.size).toBe(0);
+      expect(state.pendingToolBlocks).toHaveLength(0);
+    });
+
+    it("two tools: second errors, first gets correct output (no queue desync)", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+
+      // Stream two tool blocks
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          { type: "tool_use", id: "toolu_1", name: "search", input: "" },
+        ])
+      );
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          { type: "tool_use", id: "toolu_2", name: "fetch", input: "" },
+        ])
+      );
+
+      // Both tools start
+      processor.processEvent(acc, toolStartEvent("search", "run-s1"));
+      processor.processEvent(acc, toolStartEvent("fetch", "run-f1"));
+
+      // First completes successfully
+      processor.processEvent(
+        acc,
+        toolEndEvent("search", "run-s1", "search result"),
+        onPartial
+      );
+
+      // Second errors
+      processor.processEvent(acc, toolErrorEvent("fetch", "run-f1", "timeout"));
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.toolBlocksByRunId.size).toBe(0);
+      expect(state.pendingToolBlocks).toHaveLength(0);
+
+      // Verify first tool got the correct output
+      const searchBlock = state.contentChain.find(b => b.id === "toolu_1");
+      expect(searchBlock).toBeDefined();
+      expect(searchBlock!.output).toBe("search result");
+    });
+
+    it("parallel tools with out-of-order completion should assign correct outputs", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+
+      // Stream two tool blocks
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          { type: "tool_use", id: "toolu_1", name: "weather", input: "" },
+        ])
+      );
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          { type: "tool_use", id: "toolu_2", name: "time", input: "" },
+        ])
+      );
+
+      // Both start
+      processor.processEvent(acc, toolStartEvent("weather", "run-w1"));
+      processor.processEvent(acc, toolStartEvent("time", "run-t1"));
+
+      // Complete in REVERSE order (time first, then weather)
+      processor.processEvent(
+        acc,
+        toolEndEvent("time", "run-t1", "14:30"),
+        onPartial
+      );
+      processor.processEvent(
+        acc,
+        toolEndEvent("weather", "run-w1", "Sunny 22°C"),
+        onPartial
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.toolBlocksByRunId.size).toBe(0);
+
+      // weather block (toolu_1) is in contentChain (finalized when toolu_2 started)
+      const weatherBlock = state.contentChain.find(b => b.id === "toolu_1");
+      expect(weatherBlock).toBeDefined();
+      expect(weatherBlock!.output).toBe("Sunny 22°C");
+
+      // time block (toolu_2) is currentBlock
+      expect(state.currentBlock!.id).toBe("toolu_2");
+      expect(state.currentBlock!.output).toBe("14:30");
+    });
+
+    it("getResult should not crash with orphaned pending tool blocks", () => {
+      const acc = createAccumulator();
+
+      // Stream a tool block but never fire on_tool_start/on_tool_end
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          {
+            type: "tool_use",
+            id: "toolu_orphan",
+            name: "abandoned",
+            input: "",
+          },
+        ])
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.pendingToolBlocks).toHaveLength(1);
+
+      // getResult should still work without crashing
+      const result = processor.getResult(acc);
+      expect(result.content.contentChains).toBeDefined();
+      expect(result.content.contentChains!).toHaveLength(1);
+      expect(result.content.contentChains![0].steps[0].id).toBe("toolu_orphan");
     });
   });
 });
