@@ -10,6 +10,11 @@ import {
   CallbackRegistry,
 } from "../callbacks";
 import { EndpointRegistry } from "../agent-ui";
+import {
+  isValidSemver,
+  parseCallbackToken as parseCallbackTokenPure,
+  decodeCallbackParams,
+} from "./graph.logic";
 
 /**
  * Interface for graph manifest
@@ -341,8 +346,7 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
    * Version validation
    */
   validateVersion(): boolean {
-    const versionRegex = /^\d+\.\d+\.\d+$/;
-    if (!versionRegex.test(this.version)) {
+    if (!isValidSemver(this.version)) {
       throw new Error(
         `Invalid version format: ${this.version}. Expected format: X.Y.Z`
       );
@@ -827,45 +831,22 @@ export class UniversalGraphService implements IGraphService {
     graphType: string;
     handler: string;
   } {
-    const parts = token.split("_");
-
-    if (parts.length < 4 || parts[0] !== "cb") {
+    const result = parseCallbackTokenPure(token);
+    if (!result) {
       throw new Error(`Invalid callback token format: ${token}`);
     }
-
-    const graphName = parts[1];
-    const handler = parts[2];
-
-    // TODO: Add default version or extract from token
-    const graphType = `${graphName}::1.0.0`;
-
-    return { graphType, handler };
+    return result;
   }
 
   /**
    * Extract parameters from callback token
    */
   private parseCallbackParams(token: string): Record<string, any> {
-    const parts = token.split("_");
-
-    if (parts.length < 4) {
-      return {};
+    const result = decodeCallbackParams(token);
+    if (Object.keys(result).length === 0 && token.split("_").length >= 4) {
+      this.logger.warn(`Failed to parse callback params from token: ${token}`);
     }
-
-    try {
-      // Last part of token contains encoded parameters
-      const encodedParams = parts.slice(3).join("_");
-      const decodedParams = Buffer.from(encodedParams, "base64url").toString(
-        "utf8"
-      );
-      return JSON.parse(decodedParams);
-    } catch (error) {
-      this.logger.warn(
-        `Failed to parse callback params from token: ${token}`,
-        error
-      );
-      return {};
-    }
+    return result;
   }
 
   /**
