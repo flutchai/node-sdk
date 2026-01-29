@@ -1135,4 +1135,138 @@ describe("EventProcessor", () => {
       expect(result.content.contentChains![0].steps[0].id).toBe("toolu_orphan");
     });
   });
+
+  describe("processEvent - custom events (static messages)", () => {
+    function customEvent(
+      name: string,
+      data: any,
+      channel: StreamChannel = StreamChannel.TEXT
+    ) {
+      return {
+        event: "on_custom_event",
+        name,
+        data,
+        metadata: { stream_channel: channel, langgraph_node: "my_node" },
+      };
+    }
+
+    it("should stream static message content from send_static_message event", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+
+      processor.processEvent(
+        acc,
+        customEvent("send_static_message", { content: "Hello from node" }),
+        onPartial
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.currentBlock).toEqual(
+        expect.objectContaining({ type: "text", text: "Hello from node" })
+      );
+      expect(onPartial).toHaveBeenCalled();
+    });
+
+    it("should route custom event to correct channel", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        customEvent(
+          "send_static_message",
+          { content: "processing info" },
+          StreamChannel.PROCESSING
+        )
+      );
+
+      const procState = acc.channels.get(StreamChannel.PROCESSING)!;
+      expect(procState.currentBlock).toEqual(
+        expect.objectContaining({ type: "text", text: "processing info" })
+      );
+
+      const textState = acc.channels.get(StreamChannel.TEXT)!;
+      expect(textState.currentBlock).toBeNull();
+    });
+
+    it("should ignore custom events with non-matching name", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        customEvent("some_other_event", { content: "ignored" })
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.currentBlock).toBeNull();
+    });
+
+    it("should ignore send_static_message without content", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        customEvent("send_static_message", { other: "data" })
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.currentBlock).toBeNull();
+    });
+
+    it("should not process further event types after custom event (early return)", () => {
+      const acc = createAccumulator();
+
+      // Custom event should return early, not be processed as on_chat_model_stream etc.
+      processor.processEvent(
+        acc,
+        customEvent("send_static_message", { content: "static" })
+      );
+
+      // Only one text block should exist
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.contentChain).toHaveLength(0);
+      expect(state.currentBlock).toEqual(
+        expect.objectContaining({ type: "text", text: "static" })
+      );
+    });
+
+    it("should include static message in getResult", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        customEvent("send_static_message", { content: "Final static" })
+      );
+
+      const result = processor.getResult(acc);
+      const textChain = result.content.contentChains?.find(
+        c => c.channel === "text"
+      );
+      expect(textChain).toBeDefined();
+      expect(textChain!.steps[0].text).toBe("Final static");
+    });
+  });
+
+  describe("getResult - duplicate finalization prevention", () => {
+    it("should not duplicate currentBlock when getResult is called twice", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([{ type: "text", text: "once" }])
+      );
+
+      const result1 = processor.getResult(acc);
+      const result2 = processor.getResult(acc);
+
+      const chain1 = result1.content.contentChains?.find(
+        c => c.channel === "text"
+      );
+      const chain2 = result2.content.contentChains?.find(
+        c => c.channel === "text"
+      );
+
+      expect(chain1!.steps).toHaveLength(1);
+      expect(chain2!.steps).toHaveLength(1);
+    });
+  });
 });

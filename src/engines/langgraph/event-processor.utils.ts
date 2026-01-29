@@ -302,40 +302,14 @@ export class EventProcessor {
   ): void {
     this.captureTraceEvent(acc, event);
 
-    // DEBUG: Log all events to understand the flow
-    this.logger.debug(
-      `🔍 EVENT: type="${event.event}", name="${event.name}", node="${event.metadata?.langgraph_node || "N/A"}"`
-    );
-
-    // 0. Custom events from config.writer() - for streaming static messages from nodes
+    // 0. Custom events - for streaming static messages from nodes
     if (event.event === "on_custom_event" && event.data) {
-      // Custom events emitted via config.writer() in nodes
-      // Used for streaming static messages that don't come from LLM
       const channel =
         (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
 
-      this.logger.log("🔍 CUSTOM EVENT DETAILS", {
-        eventName: event.name,
-        hasContent: !!event.data.content,
-        contentValue: event.data.content,
-        nodeName: event.metadata?.langgraph_node,
-        allDataKeys: Object.keys(event.data),
-      });
-
-      // Check if this is a static message streaming event
       if (event.name === "send_static_message" && event.data.content) {
         const blocks = this.normalizeContentBlocks(event.data.content);
         this.processContentStream(acc, channel, blocks, onPartial);
-        this.logger.log("📝 Streamed static message from node", {
-          nodeName: event.metadata?.langgraph_node,
-          blocksCount: blocks.length,
-        });
-      } else {
-        this.logger.warn("❌ Custom event did NOT match conditions", {
-          nameMatch: event.name === "send_static_message",
-          hasContent: !!event.data.content,
-          actualName: event.name,
-        });
       }
       return;
     }

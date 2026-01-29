@@ -209,6 +209,129 @@ describe("AbstractGraphBuilder", () => {
       );
       expect(config.configurable.metadata.version).toBe("2.0.0");
     });
+
+    it("should include checkpoint_ns and checkpoint_id", async () => {
+      const builder = new TestGraphBuilderWithManifest();
+      const payload = {
+        threadId: "t-1",
+        userId: "u-1",
+        agentId: "a-1",
+        requestId: "r-1",
+        graphType: "acme.chatbot::2.0.0",
+        message: {} as any,
+        graphSettings: {},
+      };
+
+      const config = await builder.prepareConfig(payload);
+
+      expect(config.configurable.checkpoint_ns).toBe("acme.chatbot::2.0.0");
+      expect(config.configurable.checkpoint_id).toMatch(/^t-1-\d+$/);
+    });
+
+    it("should include graphSettings from payload", async () => {
+      const builder = new TestGraphBuilderWithManifest();
+      const payload = {
+        threadId: "t-1",
+        userId: "u-1",
+        agentId: "a-1",
+        requestId: "r-1",
+        graphType: "acme.chatbot::2.0.0",
+        message: {} as any,
+        graphSettings: { systemPrompt: "Be helpful", modelId: "gpt-4" },
+      };
+
+      const config = await builder.prepareConfig(payload);
+
+      expect(config.configurable.graphSettings).toEqual({
+        systemPrompt: "Be helpful",
+        modelId: "gpt-4",
+      });
+    });
+
+    it("should default graphSettings to empty object when not provided", async () => {
+      const builder = new TestGraphBuilderWithManifest();
+      const payload = {
+        threadId: "t-1",
+        userId: "u-1",
+        agentId: "a-1",
+        requestId: "r-1",
+        graphType: "acme.chatbot::2.0.0",
+        message: {} as any,
+        graphSettings: undefined as any,
+      };
+
+      const config = await builder.prepareConfig(payload);
+
+      expect(config.configurable.graphSettings).toEqual({});
+    });
+
+    it("should set input with messages array when message is provided", async () => {
+      const builder = new TestGraphBuilderWithManifest();
+      const message = { content: "hello" };
+      const payload = {
+        threadId: "t-1",
+        userId: "u-1",
+        agentId: "a-1",
+        requestId: "r-1",
+        graphType: "acme.chatbot::2.0.0",
+        message: message as any,
+        graphSettings: {},
+      };
+
+      const config = await builder.prepareConfig(payload);
+
+      expect(config.input).toBeDefined();
+      expect(config.input.messages).toHaveLength(1);
+      expect(config.input.messages[0]).toBe(message);
+    });
+
+    it("should include workflowType in metadata", async () => {
+      const builder = new TestGraphBuilderWithManifest();
+      const payload = {
+        threadId: "t-1",
+        userId: "u-1",
+        agentId: "a-1",
+        requestId: "r-1",
+        graphType: "acme.chatbot::2.0.0",
+        message: {} as any,
+        graphSettings: {},
+      };
+
+      const config = await builder.prepareConfig(payload);
+
+      expect(config.configurable.metadata.workflowType).toBe(
+        "acme.chatbot::2.0.0"
+      );
+    });
+  });
+
+  describe("customizeConfig", () => {
+    it("should be called during prepareConfig and can modify config", async () => {
+      class CustomBuilder extends TestGraphBuilderWithManifest {
+        protected async customizeConfig(
+          config: any,
+          _payload: any
+        ): Promise<any> {
+          config.configurable.customField = "custom-value";
+          return config;
+        }
+      }
+
+      const builder = new CustomBuilder();
+      const payload = {
+        threadId: "t-1",
+        userId: "u-1",
+        agentId: "a-1",
+        requestId: "r-1",
+        graphType: "acme.chatbot::2.0.0",
+        message: {} as any,
+        graphSettings: {},
+      };
+
+      const config = await builder.prepareConfig(payload);
+
+      expect(config.configurable.customField).toBe("custom-value");
+    });
   });
 
   describe("getGraphMetadata", () => {

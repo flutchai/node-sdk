@@ -218,12 +218,6 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
    * FINAL method - cannot be overridden. Use customizeConfig() hook instead.
    */
   async prepareConfig(payload: IGraphRequestPayload): Promise<any> {
-    // DEBUG: Log incoming payload (safe serialization)
-    this.logger.debug(
-      "[prepareConfig] Incoming payload:",
-      JSON.stringify(payload, null, 2)
-    );
-
     const context = this.createGraphContext(payload);
 
     // Deserialize message if it's a serialized LangChain object
@@ -281,27 +275,6 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
 
     // Call customization hook - child classes can override this
     const finalConfig = await this.customizeConfig(baseConfig, payload);
-
-    // DEBUG: Log final config (safe serialization - skip circular references)
-    try {
-      const configCopy = JSON.parse(
-        JSON.stringify(finalConfig, (key, value) => {
-          // Skip circular references and non-serializable objects
-          if (key === "checkpointer" || key === "saver")
-            return "[Checkpointer]";
-          return value;
-        })
-      );
-      this.logger.debug(
-        "[prepareConfig] Final config:",
-        JSON.stringify(configCopy, null, 2)
-      );
-    } catch (err) {
-      this.logger.debug("[prepareConfig] Final config (structure only):", {
-        hasInput: !!finalConfig.input,
-        configurableKeys: Object.keys(finalConfig.configurable || {}),
-      });
-    }
 
     return finalConfig;
   }
