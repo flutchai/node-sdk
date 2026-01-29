@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.27] - 2026-01-29
+
+### Added
+
+- `IGraphAttachment` interface for passing large tool results through graph state without polluting LLM context
+- `generateAttachmentSummary` helper with auto-detection of tabular vs text data formats
+- `createGraphAttachment` factory function to build attachment objects from tool results
+- Unit tests for attachment summary generation (11 test cases covering tabular, text, and edge cases)
+
 ## [0.1.26] - 2026-01-29
 
 ### Added
@@ -314,7 +323,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.21...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.27...HEAD
+[0.1.27]: https://github.com/flutchai/node-sdk/compare/v0.1.26...v0.1.27
+[0.1.26]: https://github.com/flutchai/node-sdk/compare/v0.1.25...v0.1.26
+[0.1.25]: https://github.com/flutchai/node-sdk/compare/v0.1.24...v0.1.25
+[0.1.24]: https://github.com/flutchai/node-sdk/compare/v0.1.23...v0.1.24
+[0.1.23]: https://github.com/flutchai/node-sdk/compare/v0.1.22...v0.1.23
+[0.1.22]: https://github.com/flutchai/node-sdk/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/flutchai/node-sdk/compare/v0.1.20...v0.1.21
 [0.1.20]: https://github.com/flutchai/node-sdk/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/flutchai/node-sdk/compare/v0.1.17...v0.1.19

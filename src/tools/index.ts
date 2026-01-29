@@ -11,3 +11,6 @@ export * from "./mcp-tool-filter";
 
 // MCP Runtime HTTP client
 export * from "./mcp-runtime-http.client";
+
+// Attachment helpers
+export * from "./attachment-summary";
