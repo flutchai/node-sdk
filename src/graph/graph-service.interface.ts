@@ -59,50 +59,35 @@ export interface IGraphService {
 }
 
 /**
- * Request to graph service
+ * LangGraph config structure
+ */
+export interface ILangGraphConfig {
+  configurable: {
+    thread_id: string;
+    checkpoint_ns?: string;
+    checkpoint_id?: string;
+    context: {
+      messageId?: string;
+      threadId: string;
+      userId: string;
+      agentId: string;
+      platform?: string;
+      companyId?: string;
+    };
+    metadata?: Record<string, any>;
+    graphSettings?: any;
+  };
+  recursionLimit?: number;
+  signal?: AbortSignal;
+}
+
+/**
+ * Request to graph service - matches LangGraph API
  */
 export interface IGraphRequestPayload {
-  /**
-   * Unique request ID
-   */
   requestId: string;
-
-  /**
-   * Thread ID
-   */
-  threadId: string;
-
-  /**
-   * User ID
-   */
-  userId: string;
-
-  /**
-   * Agent ID
-   */
-  agentId: string;
-
-  /**
-   * User message
-   */
-  message: HumanMessage;
-
-  /**
-   * Graph type
-   */
-  graphType: string;
-
-  /**
-   * Graph settings ID
-   */
-  graphSettings: any;
-
-  /**
-   * Additional context (message history, etc)
-   */
-  context?: Record<string, any>;
-
-  metadata?: Record<string, any>;
+  input: any;
+  config: ILangGraphConfig;
 }
 
 /**
