@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.26] - 2026-01-29
+
+### Added
+
+- **MongoDB checkpointer support**: Added `@langchain/langgraph-checkpoint-mongodb` dependency for persistent state management in LangGraph workflows
+- `createStaticMessage` helper function for streaming messages in LangGraph, simplifying static message creation in stream contexts
+
+### Fixed
+
+- **Event processor**: Prevented duplicate text block finalization in `getResult` method, ensuring clean output without repeated content blocks
+
 ## [0.1.25] - 2026-01-28
 
 ### Changed

@@ -302,7 +302,19 @@ export class EventProcessor {
   ): void {
     this.captureTraceEvent(acc, event);
 
-    // 1. Streaming content (universal for all channels)
+    // 0. Custom events - for streaming static messages from nodes
+    if (event.event === "on_custom_event" && event.data) {
+      const channel =
+        (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
+
+      if (event.name === "send_static_message" && event.data.content) {
+        const blocks = this.normalizeContentBlocks(event.data.content);
+        this.processContentStream(acc, channel, blocks, onPartial);
+      }
+      return;
+    }
+
+    // 1. Streaming content from LLM (universal for all channels)
     if (event.event === "on_chat_model_stream" && event.data?.chunk?.content) {
       const channel =
         (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
@@ -421,6 +433,15 @@ export class EventProcessor {
             ...(output.answer.attachments || []),
           ];
           acc.metadata = { ...acc.metadata, ...(output.answer.metadata || {}) };
+
+          // TODO: Implement proper streaming for static messages from nodes
+          // Currently commented out due to duplication issues (same content extracted 4x from different events)
+          // Need to implement custom event emission in nodes for proper streaming
+          //
+          // Extract content from answer if it's a LangChain message
+          // if (output.answer.content) {
+          //   ... code commented out ...
+          // }
         } else if (output?.generation) {
           acc.attachments = [
             ...acc.attachments,
@@ -473,6 +494,7 @@ export class EventProcessor {
       // Finalize current block if exists
       if (state.currentBlock) {
         state.contentChain.push(state.currentBlock);
+        state.currentBlock = null; // Clear to prevent duplicate finalization
       }
 
       // Create chain if has blocks
