@@ -1,7 +1,10 @@
 // packages/sdk/src/universal-graph.module.ts
-import { DynamicModule, Module, Provider } from "@nestjs/common";
+import { DynamicModule, Module, Provider, Logger } from "@nestjs/common";
 import { ModuleRef, DiscoveryModule, MetadataScanner } from "@nestjs/core";
-import { ConfigModule } from "@nestjs/config";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import mongoose, { Connection } from "mongoose";
+import { MongoDBSaver } from "@langchain/langgraph-checkpoint-mongodb";
+import { createMongoClientAdapter } from "./mongodb";
 import {
   AbstractGraphBuilder,
   IGraphRequestPayload,
@@ -42,6 +45,20 @@ import {
 } from "../agent-ui";
 
 /**
+ * MongoDB configuration options
+ */
+export interface MongoDBConfig {
+  /** MongoDB connection URI */
+  uri?: string;
+  /** Database name */
+  dbName?: string;
+  /** Checkpoint collection name */
+  checkpointCollectionName?: string;
+  /** Checkpoint writes collection name */
+  checkpointWritesCollectionName?: string;
+}
+
+/**
  * Options for UniversalGraphModule configuration
  */
 export interface UniversalGraphModuleOptions {
@@ -49,6 +66,8 @@ export interface UniversalGraphModuleOptions {
   engineType?: GraphEngineType;
   /** Versioning configurations for graphs */
   versioning?: VersioningConfig[];
+  /** MongoDB configuration for checkpointer */
+  mongodb?: MongoDBConfig;
 }
 
 /**
@@ -277,6 +296,80 @@ export class UniversalGraphModule {
         },
         inject: [CallbackRegistry],
       },
+      // MongoDB connection (optional - only if mongodb config provided)
+      ...(options.mongodb
+        ? [
+            {
+              provide: "MONGO_CONNECTION",
+              useFactory: async (
+                configService: ConfigService
+              ): Promise<Connection> => {
+                const logger = new Logger("UniversalGraphModule");
+                const mongoUri =
+                  options.mongodb?.uri ||
+                  configService.get<string>("MONGODB_URI") ||
+                  process.env.MONGODB_URI;
+                const dbName =
+                  options.mongodb?.dbName ||
+                  configService.get<string>("MONGO_DB_NAME") ||
+                  process.env.MONGO_DB_NAME;
+
+                if (!mongoUri) {
+                  throw new Error(
+                    "MONGODB_URI is not defined in options, config, or environment"
+                  );
+                }
+
+                logger.log(
+                  `Connecting to MongoDB: ${mongoUri?.substring(0, 50) + "..."}`
+                );
+                try {
+                  await mongoose.connect(mongoUri, { dbName });
+                  logger.log(`Successfully connected to MongoDB (db: ${dbName})`);
+                  return mongoose.connection;
+                } catch (error) {
+                  logger.error("Failed to connect to MongoDB", error as Error);
+                  throw error;
+                }
+              },
+              inject: [ConfigService],
+            },
+            // MongoDB checkpointer
+            {
+              provide: "CHECKPOINTER",
+              useFactory: async (
+                connection: Connection,
+                configService: ConfigService
+              ) => {
+                const logger = new Logger("UniversalGraphModule");
+                const dbName =
+                  options.mongodb?.dbName ||
+                  configService.get<string>("MONGO_DB_NAME") ||
+                  process.env.MONGO_DB_NAME;
+                const checkpointCollectionName =
+                  options.mongodb?.checkpointCollectionName || "checkpoints";
+                const checkpointWritesCollectionName =
+                  options.mongodb?.checkpointWritesCollectionName ||
+                  "checkpoint_writes";
+
+                logger.log(
+                  `Creating CHECKPOINTER with collections: ${checkpointCollectionName}, ${checkpointWritesCollectionName}`
+                );
+
+                const mongooseClient = connection.getClient();
+                const mongoClient = createMongoClientAdapter(mongooseClient);
+
+                return new MongoDBSaver({
+                  client: mongoClient,
+                  dbName,
+                  checkpointCollectionName,
+                  checkpointWritesCollectionName,
+                });
+              },
+              inject: ["MONGO_CONNECTION", ConfigService],
+            },
+          ]
+        : []),
       {
         provide: "GRAPH_ENGINE",
         useFactory: (langGraphEngine: LangGraphEngine) => langGraphEngine,

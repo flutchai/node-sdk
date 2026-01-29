@@ -3,3 +3,4 @@ export * from "./base-entity";
 export * from "./bootstrap";
 export * from "./builder-registry.service";
 export * from "./universal-graph.module";
+export * from "./mongodb";

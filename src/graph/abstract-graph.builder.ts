@@ -17,6 +17,49 @@ import {
 } from "./graph.logic";
 
 /**
+ * Base context interface for graph execution
+ * Contains runtime execution data (user, agent, thread, message)
+ */
+export interface BaseGraphContext {
+  messageId?: string;
+  threadId: string;
+  userId: string;
+  agentId: string;
+  companyId?: string;
+}
+
+/**
+ * Base graph configuration interface with common fields from SDK
+ * TSettings - graph-specific settings type (e.g., { systemPrompt: string, modelId: string })
+ * TContext - extended context type (optional, defaults to BaseGraphContext)
+ */
+export interface BaseGraphConfig<
+  TSettings = any,
+  TContext extends BaseGraphContext = BaseGraphContext
+> {
+  // LangGraph checkpoint fields (from SDK)
+  thread_id: string;
+  checkpoint_ns: string;
+  checkpoint_id: string;
+
+  // Context object - primary source of runtime data
+  context: TContext;
+
+  // Metadata from SDK (for compatibility and debugging)
+  metadata: {
+    userId: string;
+    agentId: string;
+    requestId: string;
+    graphType: string;
+    version: string;
+    workflowType: string;
+  };
+
+  // Graph-specific settings (generic type parameter)
+  graphSettings?: TSettings;
+}
+
+/**
  * Interface for graph manifest
  */
 export interface IGraphManifest {
@@ -156,13 +199,7 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
    * Creates execution context for graph with tracer and usageRecorder
    * This method can be overridden in child classes for customization
    */
-  protected createGraphContext(payload: IGraphRequestPayload): {
-    messageId?: string;
-    threadId: string;
-    userId: string;
-    agentId: string;
-    companyId?: string;
-  } {
+  protected createGraphContext(payload: IGraphRequestPayload): BaseGraphContext {
     return {
       messageId: (payload as any).messageId,
       threadId: payload.threadId,
@@ -175,15 +212,47 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
   /**
    * Basic configuration preparation for graph execution
    * Automatically creates context with tracer and usageRecorder
-   * Can be overridden in child classes to add specific logic
+   * Handles message deserialization and LangGraph-compatible structure
+   * FINAL method - cannot be overridden. Use customizeConfig() hook instead.
    */
   async prepareConfig(payload: IGraphRequestPayload): Promise<any> {
+    // DEBUG: Log incoming payload (safe serialization)
+    this.logger.debug("[prepareConfig] Incoming payload:", JSON.stringify(payload, null, 2));
+
     const context = this.createGraphContext(payload);
 
-    return {
+    // Deserialize message if it's a serialized LangChain object
+    let message = payload.message;
+    if (payload.message && typeof payload.message === 'object' && 'lc' in payload.message) {
+      try {
+        const { load } = await import("@langchain/core/load");
+        message = await load(JSON.stringify(payload.message));
+        this.logger.debug({
+          message: "Deserialized BaseMessage using load()",
+          type: message.constructor?.name,
+        });
+      } catch (error) {
+        this.logger.warn({
+          message: "Failed to deserialize message",
+          error: error.message,
+        });
+      }
+    }
+
+    // Standard LangGraph-compatible configuration structure
+    const baseConfig = {
+      // Input for LangGraph (messages array)
+      input: message ? {
+        messages: [message],
+      } : undefined,
+
+      // Configurable settings for LangGraph checkpointing and context
       configurable: {
         thread_id: payload.threadId,
+        checkpoint_ns: this.graphType,
+        checkpoint_id: `${payload.threadId}-${Date.now()}`,
         context,
+
         // Add metadata for compatibility
         metadata: {
           userId: payload.userId,
@@ -191,9 +260,59 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
           requestId: payload.requestId,
           graphType: this.graphType,
           version: this.version,
+          workflowType: this.graphType,
         },
+
+        // Graph-specific settings from payload
+        graphSettings: payload.graphSettings || {},
       },
     };
+
+    // Call customization hook - child classes can override this
+    const finalConfig = await this.customizeConfig(baseConfig, payload);
+
+    // DEBUG: Log final config (safe serialization - skip circular references)
+    try {
+      const configCopy = JSON.parse(JSON.stringify(finalConfig, (key, value) => {
+        // Skip circular references and non-serializable objects
+        if (key === 'checkpointer' || key === 'saver') return '[Checkpointer]';
+        return value;
+      }));
+      this.logger.debug("[prepareConfig] Final config:", JSON.stringify(configCopy, null, 2));
+    } catch (err) {
+      this.logger.debug("[prepareConfig] Final config (structure only):", {
+        hasInput: !!finalConfig.input,
+        configurableKeys: Object.keys(finalConfig.configurable || {}),
+      });
+    }
+
+    return finalConfig;
+  }
+
+  /**
+   * Hook for customizing config after base preparation
+   * Override this method in child classes to add/modify config fields
+   *
+   * @param config - Base config prepared by SDK
+   * @param payload - Original request payload
+   * @returns Modified config
+   *
+   * @example
+   * ```typescript
+   * protected async customizeConfig(config: any, payload: IGraphRequestPayload): Promise<any> {
+   *   // Add custom fields
+   *   config.configurable.myCustomField = "value";
+   *
+   *   // Modify existing fields
+   *   config.configurable.context.customData = await this.loadCustomData(payload);
+   *
+   *   return config;
+   * }
+   * ```
+   */
+  protected async customizeConfig(config: any, payload: IGraphRequestPayload): Promise<any> {
+    // Default implementation - just return config as is
+    return config;
   }
 
   /**
