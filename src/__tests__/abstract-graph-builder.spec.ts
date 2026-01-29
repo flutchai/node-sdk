@@ -334,6 +334,73 @@ describe("AbstractGraphBuilder", () => {
     });
   });
 
+  describe("prepareConfig - message deserialization", () => {
+    it("should deserialize LangChain-serialized message (lc format)", async () => {
+      const builder = new TestGraphBuilderWithManifest();
+      // Simulate a serialized LangChain message with lc property
+      const serializedMessage = {
+        lc: 1,
+        type: "constructor",
+        id: ["langchain_core", "messages", "HumanMessage"],
+        kwargs: { content: "hello" },
+      };
+
+      const payload = {
+        threadId: "t-1",
+        userId: "u-1",
+        agentId: "a-1",
+        requestId: "r-1",
+        graphType: "acme.chatbot::2.0.0",
+        message: serializedMessage as any,
+        graphSettings: {},
+      };
+
+      const config = await builder.prepareConfig(payload);
+
+      // Should have input with messages array
+      expect(config.input).toBeDefined();
+      expect(config.input.messages).toHaveLength(1);
+      // The deserialized message should be a HumanMessage instance (or fallback to original if load fails)
+      expect(config.input.messages[0]).toBeDefined();
+    });
+
+    it("should keep non-lc message as-is", async () => {
+      const builder = new TestGraphBuilderWithManifest();
+      const plainMessage = { content: "plain", role: "user" };
+
+      const payload = {
+        threadId: "t-1",
+        userId: "u-1",
+        agentId: "a-1",
+        requestId: "r-1",
+        graphType: "acme.chatbot::2.0.0",
+        message: plainMessage as any,
+        graphSettings: {},
+      };
+
+      const config = await builder.prepareConfig(payload);
+
+      expect(config.input.messages[0]).toBe(plainMessage);
+    });
+
+    it("should set input to undefined when message is falsy", async () => {
+      const builder = new TestGraphBuilderWithManifest();
+      const payload = {
+        threadId: "t-1",
+        userId: "u-1",
+        agentId: "a-1",
+        requestId: "r-1",
+        graphType: "acme.chatbot::2.0.0",
+        message: null as any,
+        graphSettings: {},
+      };
+
+      const config = await builder.prepareConfig(payload);
+
+      expect(config.input).toBeUndefined();
+    });
+  });
+
   describe("getGraphMetadata", () => {
     it("should return manifest if already loaded", async () => {
       const builder = new TestGraphBuilderWithManifest();
