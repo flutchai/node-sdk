@@ -28,9 +28,9 @@ describe("createMongoClientAdapter", () => {
   });
 
   it("should throw when db method is missing", () => {
-    expect(() => createMongoClientAdapter({ close: jest.fn(), connect: jest.fn() })).toThrow(
-      "Invalid MongoDB client: missing required methods"
-    );
+    expect(() =>
+      createMongoClientAdapter({ close: jest.fn(), connect: jest.fn() })
+    ).toThrow("Invalid MongoDB client: missing required methods");
   });
 
   it("should throw when close method is missing", () => {
