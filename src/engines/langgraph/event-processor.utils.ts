@@ -303,7 +303,9 @@ export class EventProcessor {
     this.captureTraceEvent(acc, event);
 
     // DEBUG: Log all events to understand the flow
-    this.logger.debug(`🔍 EVENT: type="${event.event}", name="${event.name}", node="${event.metadata?.langgraph_node || 'N/A'}"`);
+    this.logger.debug(
+      `🔍 EVENT: type="${event.event}", name="${event.name}", node="${event.metadata?.langgraph_node || "N/A"}"`
+    );
 
     // 0. Custom events from config.writer() - for streaming static messages from nodes
     if (event.event === "on_custom_event" && event.data) {

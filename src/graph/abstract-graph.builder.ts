@@ -35,7 +35,7 @@ export interface BaseGraphContext {
  */
 export interface BaseGraphConfig<
   TSettings = any,
-  TContext extends BaseGraphContext = BaseGraphContext
+  TContext extends BaseGraphContext = BaseGraphContext,
 > {
   // LangGraph checkpoint fields (from SDK)
   thread_id: string;
@@ -199,7 +199,9 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
    * Creates execution context for graph with tracer and usageRecorder
    * This method can be overridden in child classes for customization
    */
-  protected createGraphContext(payload: IGraphRequestPayload): BaseGraphContext {
+  protected createGraphContext(
+    payload: IGraphRequestPayload
+  ): BaseGraphContext {
     return {
       messageId: (payload as any).messageId,
       threadId: payload.threadId,
@@ -217,13 +219,20 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
    */
   async prepareConfig(payload: IGraphRequestPayload): Promise<any> {
     // DEBUG: Log incoming payload (safe serialization)
-    this.logger.debug("[prepareConfig] Incoming payload:", JSON.stringify(payload, null, 2));
+    this.logger.debug(
+      "[prepareConfig] Incoming payload:",
+      JSON.stringify(payload, null, 2)
+    );
 
     const context = this.createGraphContext(payload);
 
     // Deserialize message if it's a serialized LangChain object
     let message = payload.message;
-    if (payload.message && typeof payload.message === 'object' && 'lc' in payload.message) {
+    if (
+      payload.message &&
+      typeof payload.message === "object" &&
+      "lc" in payload.message
+    ) {
       try {
         const { load } = await import("@langchain/core/load");
         message = await load(JSON.stringify(payload.message));
@@ -242,9 +251,11 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
     // Standard LangGraph-compatible configuration structure
     const baseConfig = {
       // Input for LangGraph (messages array)
-      input: message ? {
-        messages: [message],
-      } : undefined,
+      input: message
+        ? {
+            messages: [message],
+          }
+        : undefined,
 
       // Configurable settings for LangGraph checkpointing and context
       configurable: {
@@ -273,12 +284,18 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
 
     // DEBUG: Log final config (safe serialization - skip circular references)
     try {
-      const configCopy = JSON.parse(JSON.stringify(finalConfig, (key, value) => {
-        // Skip circular references and non-serializable objects
-        if (key === 'checkpointer' || key === 'saver') return '[Checkpointer]';
-        return value;
-      }));
-      this.logger.debug("[prepareConfig] Final config:", JSON.stringify(configCopy, null, 2));
+      const configCopy = JSON.parse(
+        JSON.stringify(finalConfig, (key, value) => {
+          // Skip circular references and non-serializable objects
+          if (key === "checkpointer" || key === "saver")
+            return "[Checkpointer]";
+          return value;
+        })
+      );
+      this.logger.debug(
+        "[prepareConfig] Final config:",
+        JSON.stringify(configCopy, null, 2)
+      );
     } catch (err) {
       this.logger.debug("[prepareConfig] Final config (structure only):", {
         hasInput: !!finalConfig.input,
@@ -310,7 +327,10 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
    * }
    * ```
    */
-  protected async customizeConfig(config: any, payload: IGraphRequestPayload): Promise<any> {
+  protected async customizeConfig(
+    config: any,
+    payload: IGraphRequestPayload
+  ): Promise<any> {
     // Default implementation - just return config as is
     return config;
   }

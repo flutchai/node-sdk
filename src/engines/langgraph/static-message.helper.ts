@@ -39,11 +39,7 @@ export async function createStaticMessage(
   });
 
   // Dispatch custom event for streaming (works with streamEvents v2)
-  await dispatchCustomEvent(
-    "send_static_message",
-    { content },
-    config
-  );
+  await dispatchCustomEvent("send_static_message", { content }, config);
 
   return message;
 }

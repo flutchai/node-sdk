@@ -325,7 +325,9 @@ export class UniversalGraphModule {
                 );
                 try {
                   await mongoose.connect(mongoUri, { dbName });
-                  logger.log(`Successfully connected to MongoDB (db: ${dbName})`);
+                  logger.log(
+                    `Successfully connected to MongoDB (db: ${dbName})`
+                  );
                   return mongoose.connection;
                 } catch (error) {
                   logger.error("Failed to connect to MongoDB", error as Error);
