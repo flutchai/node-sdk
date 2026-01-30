@@ -1,6 +1,6 @@
 {
   "name": "@flutchai/flutch-sdk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Base infrastructure package for building graph microservices - core interfaces, types, utilities, and execution engine",
   "main": "./dist/index.cjs",

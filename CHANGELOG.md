@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-01-30
+
+### Added
+
+- `IGraphLogger` interface — decouples `AbstractGraphBuilder` logger from NestJS `Logger`, allowing any compatible logger implementation
+
+### Changed
+
+- `AbstractGraphBuilder.logger` type changed from NestJS `Logger` to `IGraphLogger` interface
+- `AbstractGraphBuilder.manifestPath` type changed from `string` to `string | null`
+
 ## [0.2.0] - 2026-01-30
 
 ### Changed
