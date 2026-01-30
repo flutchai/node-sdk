@@ -50,7 +50,9 @@ function generateTabularSummary(data: any[], toolCallId: string): string {
   const columns = Object.keys(data[0]);
   const sampleRows = data.slice(0, MAX_SAMPLE_ROWS);
 
-  let summary = `${rowCount} rows, ${columns.length} columns (${columns.join(", ")})\n`;
+  const rowLabel = rowCount === 1 ? "row" : "rows";
+  const colLabel = columns.length === 1 ? "column" : "columns";
+  let summary = `${rowCount} ${rowLabel}, ${columns.length} ${colLabel} (${columns.join(", ")})\n`;
   summary += `Sample data:\n`;
 
   for (const row of sampleRows) {

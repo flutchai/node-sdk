@@ -37,7 +37,7 @@ describe("generateAttachmentSummary", () => {
       const data = [{ x: 1 }];
       const summary = generateAttachmentSummary(data, toolCallId);
 
-      expect(summary).toContain("1 rows, 1 columns");
+      expect(summary).toContain("1 row, 1 column");
       expect(summary).toContain(JSON.stringify({ x: 1 }));
     });
   });
@@ -102,7 +102,7 @@ describe("createGraphAttachment", () => {
       toolName: "my_tool",
       toolCallId: "call_xyz",
     });
-    expect(result.summary).toContain("1 rows");
+    expect(result.summary).toContain("1 row");
     expect(result.createdAt).toBeGreaterThanOrEqual(now);
   });
 });
