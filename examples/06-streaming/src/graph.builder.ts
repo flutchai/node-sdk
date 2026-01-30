@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import {
-  AbstractGraphBuilder,
+  ExternalGraphBuilder,
   IGraphRequestPayload,
 } from "@flutchai/flutch-sdk";
 import {
@@ -31,7 +31,7 @@ type ChatStateType = typeof ChatState.State;
  * Demonstrates real-time streaming of LLM responses
  */
 @Injectable()
-export class StreamingChatBuilder extends AbstractGraphBuilder<"1.0.0"> {
+export class StreamingChatBuilder extends ExternalGraphBuilder<"1.0.0"> {
   readonly version = "1.0.0" as const;
 
   private model: ChatOpenAI;

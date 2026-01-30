@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import {
-  AbstractGraphBuilder,
+  ExternalGraphBuilder,
   IGraphRequestPayload,
 } from "@flutchai/flutch-sdk";
 import { StateGraph, START, END, Annotation } from "@langchain/langgraph";
@@ -22,7 +22,7 @@ type GraphStateType = typeof GraphState.State;
  * This is the most basic example of using the Flutch SDK
  */
 @Injectable()
-export class BasicGraphBuilder extends AbstractGraphBuilder<"1.0.0"> {
+export class BasicGraphBuilder extends ExternalGraphBuilder<"1.0.0"> {
   readonly version = "1.0.0" as const;
 
   async buildGraph(payload: IGraphRequestPayload): Promise<any> {
