@@ -142,7 +142,7 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
     enrichedArgs: Record<string, any>,
     executionContext: Record<string, any>,
     config?: RunnableConfig
-  ): Promise<{ content: string; success: boolean }> {
+  ): Promise<{ content: string; success: boolean; rawResult?: any }> {
     // Parse callback configuration
     const parsedConfig = parseCallbackConfigArg(config);
     const callbackManager = CallbackManager.configure(parsedConfig.callbacks);
@@ -173,7 +173,7 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
         executionContext
       );
 
-      // Create content
+      // Create content (stringified for ToolMessage)
       const content = result.success
         ? JSON.stringify(result)
         : result.error || JSON.stringify(result);
@@ -181,9 +181,14 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
       // Emit on_tool_end event
       await runManager?.handleToolEnd(content);
 
+      // rawResult: structured data before stringification.
+      // Used by graph builder to detect large results and store them
+      // as attachments in graph state (see IGraphAttachment).
+      // Consumers that don't need it simply ignore this optional field.
       return {
         content,
         success: result.success,
+        rawResult: result.success ? result.result : undefined,
       };
     } catch (error) {
       this.logger.error(`Error executing tool ${toolName}:`, error);
