@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import {
-  AbstractGraphBuilder,
+  ExternalGraphBuilder,
   IGraphRequestPayload,
 } from "@flutchai/flutch-sdk";
 import { StateGraph, START, END, Annotation } from "@langchain/langgraph";
@@ -30,7 +30,7 @@ class SimpleDocumentStore {
       }),
       new Document({
         pageContent:
-          "The AbstractGraphBuilder is the base class for all graph implementations. It provides version management and callback registration.",
+          "The ExternalGraphBuilder is the base class for all graph implementations. It provides version management and callback registration.",
         metadata: { source: "docs", topic: "builders" },
       }),
       new Document({
@@ -94,7 +94,7 @@ type RagStateType = typeof RagState.State;
  * RAG agent builder with retrieval and generation
  */
 @Injectable()
-export class RagAgentBuilder extends AbstractGraphBuilder<"1.0.0"> {
+export class RagAgentBuilder extends ExternalGraphBuilder<"1.0.0"> {
   readonly version = "1.0.0" as const;
 
   private model: ChatOpenAI;

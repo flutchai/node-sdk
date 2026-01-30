@@ -76,23 +76,13 @@ export interface UniversalGraphModuleOptions {
 function createMetaBuilder(
   config: VersioningConfig,
   versionedGraphService: VersionedGraphService,
-  moduleRef: ModuleRef,
-  callbackRegistry: CallbackRegistry,
-  endpointRegistry: EndpointRegistry
+  moduleRef: ModuleRef
 ) {
   // Create dynamic class with meaningful name
   const className = `${config.baseGraphType.replace(/\./g, "")}VersionRouter`;
 
   class VersionRouter extends AbstractGraphBuilder<any> {
     readonly version = "router" as any; // Version router
-
-    // Inject CallbackRegistry and EndpointRegistry manually since we can't use decorators in dynamic classes
-    constructor() {
-      super();
-      // Manually assign the registry instances
-      (this as any).callbackRegistry = callbackRegistry;
-      (this as any).endpointRegistry = endpointRegistry;
-    }
 
     // Override graphType to display base type
     get graphType(): string {
@@ -399,9 +389,7 @@ export class UniversalGraphModule {
           builderRegistry: BuilderRegistryService,
           versionedGraphService: VersionedGraphService,
           configs: VersioningConfig[],
-          callbackRegistry: CallbackRegistry,
-          moduleRef: ModuleRef,
-          endpointRegistry: EndpointRegistry
+          moduleRef: ModuleRef
         ) => {
           console.log(
             "🔧 VERSIONING_INITIALIZER running with configs:",
@@ -421,9 +409,7 @@ export class UniversalGraphModule {
               const VersionRouterClass = createMetaBuilder(
                 config,
                 versionedGraphService,
-                moduleRef,
-                callbackRegistry,
-                endpointRegistry
+                moduleRef
               );
               const versionRouter = new VersionRouterClass();
               console.log(
@@ -435,13 +421,6 @@ export class UniversalGraphModule {
               // Fallback: create simple meta-builder without ModuleRef dependency
               class SimpleVersionRouter extends AbstractGraphBuilder<any> {
                 readonly version = "router" as any;
-
-                constructor() {
-                  super();
-                  // Manually assign the registry instances
-                  (this as any).callbackRegistry = callbackRegistry;
-                  (this as any).endpointRegistry = endpointRegistry;
-                }
 
                 get graphType(): string {
                   return config.baseGraphType;
@@ -476,9 +455,7 @@ export class UniversalGraphModule {
           BuilderRegistryService,
           VersionedGraphService,
           "VERSIONING_CONFIGS",
-          CallbackRegistry,
           ModuleRef,
-          EndpointRegistry,
         ],
       },
     ];

@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import {
-  AbstractGraphBuilder,
+  ExternalGraphBuilder,
   IGraphRequestPayload,
   WithCallbacks,
 } from "@flutchai/flutch-sdk";
@@ -28,7 +28,7 @@ type OrderStateType = typeof OrderState.State;
  */
 @Injectable()
 @WithCallbacks(OrderCallbacks)
-export class OrderProcessingBuilder extends AbstractGraphBuilder<"1.0.0"> {
+export class OrderProcessingBuilder extends ExternalGraphBuilder<"1.0.0"> {
   readonly version = "1.0.0" as const;
 
   private model: ChatOpenAI;

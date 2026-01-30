@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-01-30
+
+### Changed
+
+- **BREAKING:** Split `AbstractGraphBuilder` into a clean class hierarchy:
+  - `AbstractGraphBuilder` is now a pure base class without registry dependencies (manifest, config, version validation only)
+  - New `ExternalGraphBuilder` extends `AbstractGraphBuilder` with required `CallbackRegistry` and `EndpointRegistry` injection and auto-registration
+- External graph builders (microservices) should now extend `ExternalGraphBuilder` instead of `AbstractGraphBuilder`
+- Backend in-process builders extend `AbstractGraphBuilder` directly (no registries needed)
+- Added `@Injectable()` decorator to both `AbstractGraphBuilder` and `ExternalGraphBuilder`
+
+### Migration
+
+Replace `extends AbstractGraphBuilder` with `extends ExternalGraphBuilder` in graph builders that use callbacks or endpoints:
+
+```typescript
+// Before
+import { AbstractGraphBuilder } from "@flutchai/flutch-sdk";
+export class MyBuilder extends AbstractGraphBuilder<"1.0.0"> { ... }
+
+// After
+import { ExternalGraphBuilder } from "@flutchai/flutch-sdk";
+export class MyBuilder extends ExternalGraphBuilder<"1.0.0"> { ... }
+```
+
 ## [0.1.27] - 2026-01-29
 
 ### Added

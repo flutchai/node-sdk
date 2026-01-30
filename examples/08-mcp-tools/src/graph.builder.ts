@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import {
-  AbstractGraphBuilder,
+  ExternalGraphBuilder,
   IGraphRequestPayload,
 } from "@flutchai/flutch-sdk";
 import {
@@ -56,7 +56,7 @@ function createMockMcpTool(
  * Demonstrates how to integrate MCP tools with the SDK
  */
 @Injectable()
-export class McpAgentBuilder extends AbstractGraphBuilder<"1.0.0"> {
+export class McpAgentBuilder extends ExternalGraphBuilder<"1.0.0"> {
   readonly version = "1.0.0" as const;
 
   private tools: DynamicStructuredTool[];

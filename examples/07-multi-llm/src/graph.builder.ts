@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import {
-  AbstractGraphBuilder,
+  ExternalGraphBuilder,
   IGraphRequestPayload,
 } from "@flutchai/flutch-sdk";
 import {
@@ -33,7 +33,7 @@ type ChatStateType = typeof ChatState.State;
  * Supports switching between OpenAI, Anthropic, and Mistral
  */
 @Injectable()
-export class MultiLLMBuilder extends AbstractGraphBuilder<"1.0.0"> {
+export class MultiLLMBuilder extends ExternalGraphBuilder<"1.0.0"> {
   readonly version = "1.0.0" as const;
 
   // Cache for model instances

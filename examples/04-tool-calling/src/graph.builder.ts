@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import {
-  AbstractGraphBuilder,
+  ExternalGraphBuilder,
   IGraphRequestPayload,
 } from "@flutchai/flutch-sdk";
 import {
@@ -28,7 +28,7 @@ type AgentStateType = typeof AgentState.State;
  * Tool-calling agent builder
  */
 @Injectable()
-export class ToolCallingAgentBuilder extends AbstractGraphBuilder<"1.0.0"> {
+export class ToolCallingAgentBuilder extends ExternalGraphBuilder<"1.0.0"> {
   readonly version = "1.0.0" as const;
 
   async buildGraph(payload: IGraphRequestPayload): Promise<any> {

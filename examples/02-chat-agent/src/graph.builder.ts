@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import {
-  AbstractGraphBuilder,
+  ExternalGraphBuilder,
   IGraphRequestPayload,
 } from "@flutchai/flutch-sdk";
 import {
@@ -28,7 +28,7 @@ type ChatStateType = typeof ChatState.State;
  * Chat agent builder that uses OpenAI for conversation
  */
 @Injectable()
-export class ChatAgentBuilder extends AbstractGraphBuilder<"1.0.0"> {
+export class ChatAgentBuilder extends ExternalGraphBuilder<"1.0.0"> {
   readonly version = "1.0.0" as const;
 
   private model: ChatOpenAI;
