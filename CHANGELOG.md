@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.3.0] - 2026-01-30
+## [0.2.1] - 2026-01-30
 
 ### Added
 - `IGraphLogger` interface — decouples `AbstractGraphBuilder` logger from NestJS `Logger`, allowing any compatible logger implementation
