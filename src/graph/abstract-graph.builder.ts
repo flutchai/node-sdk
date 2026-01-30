@@ -106,6 +106,17 @@ export interface IGraphManifest {
 }
 
 /**
+ * Logger interface compatible with NestJS Logger and other logging libraries
+ */
+export interface IGraphLogger {
+  log: (message: any, ...optionalParams: any[]) => void;
+  error: (message: any, ...optionalParams: any[]) => void;
+  warn: (message: any, ...optionalParams: any[]) => void;
+  debug: (message: any, ...optionalParams: any[]) => void;
+  verbose?: (message: any, ...optionalParams: any[]) => void;
+}
+
+/**
  * Base abstraction for versioned graphs
  * All graphs should specify only version (e.g. "1.0.0")
  * Full graphType is auto-generated from baseGraphType + version
@@ -117,7 +128,7 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
    */
   abstract readonly version: V;
 
-  protected logger = new Logger(AbstractGraphBuilder.name);
+  protected logger: IGraphLogger = new Logger(AbstractGraphBuilder.name);
 
   /**
    * Returns full graph type (companySlug.name::version)
@@ -136,7 +147,7 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
   /**
    * Path to root graph manifest (defaults to graph.manifest.json in root)
    */
-  protected manifestPath: string = path.join(
+  protected manifestPath: string | null = path.join(
     process.cwd(),
     "graph.manifest.json"
   );
