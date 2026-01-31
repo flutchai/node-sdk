@@ -163,7 +163,6 @@ describe("AbstractGraphBuilder", () => {
     });
   });
 
-
   describe("preparePayload", () => {
     it("should merge payload.config with input", async () => {
       const builder = new TestGraphBuilderWithManifest();
@@ -256,7 +255,10 @@ describe("AbstractGraphBuilder", () => {
   describe("customizeConfig", () => {
     it("should be called during prepareConfig and can modify config", async () => {
       class CustomBuilder extends TestGraphBuilderWithManifest {
-        protected async customizeConfig(config: any, _payload: any): Promise<any> {
+        protected async customizeConfig(
+          config: any,
+          _payload: any
+        ): Promise<any> {
           config.configurable = config.configurable || {};
           config.configurable.customField = "custom-value";
           return config;
