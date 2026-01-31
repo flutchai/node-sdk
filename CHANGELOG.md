@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-01-30
+
+### Added
+
+- Input deserialization in `LangGraphEngine` - automatically deserializes LangChain serialized objects (with `lc` property) before graph execution
+- Input deserialization in `AbstractGraphBuilder.prepareConfig` - deserializes serialized inputs from payload
+- `customizeConfig` hook restored in `AbstractGraphBuilder` - allows child classes to customize config before graph execution
+
+### Changed
+
+- Simplified `prepareConfig` method - now merges `payload.config` with deserialized `payload.input`
+- `customizeConfig` hook signature changed to accept both `config` and `payload` parameters
+- `LangGraphEngine.invokeGraph` and `streamGraph` now deserialize input before passing to graph
+
+### Fixed
+
+- Input deserialization now properly handles LangChain serialized messages in both `AbstractGraphBuilder` and `LangGraphEngine`
+
 ## [0.2.1] - 2026-01-30
 
 ### Added
