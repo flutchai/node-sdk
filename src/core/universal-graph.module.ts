@@ -90,9 +90,11 @@ function createMetaBuilder(
     }
 
     async buildGraph(payload: IGraphRequestPayload): Promise<any> {
-      const graphType = payload.graphSettings?.graphType;
+      const graphType = payload.config?.configurable?.graphSettings?.graphType;
       if (!graphType) {
-        throw new Error("GraphType is required in payload.graphSettings");
+        throw new Error(
+          "GraphType is required in payload.config.configurable.graphSettings"
+        );
       }
 
       const resolution = await versionedGraphService.resolveVersion(graphType, {
@@ -114,10 +116,12 @@ function createMetaBuilder(
       }
     }
 
-    async prepareConfig(payload: IGraphRequestPayload): Promise<any> {
-      const graphType = payload.graphSettings?.graphType;
+    async preparePayload(payload: IGraphRequestPayload): Promise<any> {
+      const graphType = payload.config?.configurable?.graphSettings?.graphType;
       if (!graphType) {
-        throw new Error("GraphType is required in payload.graphSettings");
+        throw new Error(
+          "GraphType is required in payload.config.configurable.graphSettings"
+        );
       }
 
       const resolution = await versionedGraphService.resolveVersion(graphType, {
@@ -136,9 +140,15 @@ function createMetaBuilder(
 
       const updatedPayload = {
         ...payload,
-        graphSettings: {
-          ...payload.graphSettings,
-          graphType: resolution.fullGraphType,
+        config: {
+          ...payload.config,
+          configurable: {
+            ...payload.config.configurable,
+            graphSettings: {
+              ...payload.config.configurable.graphSettings,
+              graphType: resolution.fullGraphType,
+            },
+          },
         },
       };
 
@@ -432,7 +442,7 @@ export class UniversalGraphModule {
                   );
                 }
 
-                async prepareConfig(payload: any): Promise<any> {
+                async preparePayload(payload: any): Promise<any> {
                   throw new Error(
                     "ModuleRef not available - cannot prepare config"
                   );

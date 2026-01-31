@@ -21,6 +21,7 @@ export interface BaseGraphContext {
   threadId: string;
   userId: string;
   agentId: string;
+  platform?: string; // Platform where message came from (telegram, instagram_dm, etc)
   companyId?: string;
 }
 
@@ -179,43 +180,31 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
   abstract buildGraph(config: any): Promise<any>;
 
   /**
-   * Creates execution context for graph with tracer and usageRecorder
-   * This method can be overridden in child classes for customization
+   * Prepare config for graph execution
+   * Config comes ready from backend, just add input
    */
-  protected createGraphContext(
-    payload: IGraphRequestPayload
-  ): BaseGraphContext {
-    return {
-      messageId: (payload as any).messageId,
-      threadId: payload.threadId,
-      userId: payload.userId,
-      agentId: payload.agentId,
-      companyId: (payload as any).companyId,
-    };
+  async preparePayload(payload: IGraphRequestPayload): Promise<any> {
+    const config = await this.prepareConfig(payload);
+    return config;
   }
 
   /**
-   * Basic configuration preparation for graph execution
-   * Automatically creates context with tracer and usageRecorder
-   * Handles message deserialization and LangGraph-compatible structure
-   * FINAL method - cannot be overridden. Use customizeConfig() hook instead.
+   * Internal method to prepare config with input deserialization
    */
-  async prepareConfig(payload: IGraphRequestPayload): Promise<any> {
-    const context = this.createGraphContext(payload);
-
-    // Deserialize message if it's a serialized LangChain object
-    let message = payload.message;
+  protected async prepareConfig(payload: IGraphRequestPayload): Promise<any> {
+    // Deserialize input if it's a serialized LangChain object
+    let input = payload.input;
     if (
-      payload.message &&
-      typeof payload.message === "object" &&
-      "lc" in payload.message
+      payload.input &&
+      typeof payload.input === "object" &&
+      "lc" in payload.input
     ) {
       try {
         const { load } = await import("@langchain/core/load");
-        message = await load(JSON.stringify(payload.message));
+        input = await load(JSON.stringify(payload.input));
         this.logger.debug({
           message: "Deserialized BaseMessage using load()",
-          type: message.constructor?.name,
+          type: input.constructor?.name,
         });
       } catch (error) {
         this.logger.warn({
@@ -225,35 +214,9 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
       }
     }
 
-    // Standard LangGraph-compatible configuration structure
     const baseConfig = {
-      // Input for LangGraph (messages array)
-      input: message
-        ? {
-            messages: [message],
-          }
-        : undefined,
-
-      // Configurable settings for LangGraph checkpointing and context
-      configurable: {
-        thread_id: payload.threadId,
-        checkpoint_ns: this.graphType,
-        checkpoint_id: `${payload.threadId}-${Date.now()}`,
-        context,
-
-        // Add metadata for compatibility
-        metadata: {
-          userId: payload.userId,
-          agentId: payload.agentId,
-          requestId: payload.requestId,
-          graphType: this.graphType,
-          version: this.version,
-          workflowType: this.graphType,
-        },
-
-        // Graph-specific settings from payload
-        graphSettings: payload.graphSettings || {},
-      },
+      ...payload.config,
+      input,
     };
 
     // Call customization hook - child classes can override this
@@ -502,13 +465,19 @@ export class UniversalGraphService implements IGraphService {
   async generateAnswer(
     payload: IGraphRequestPayload
   ): Promise<IGraphResponsePayload> {
-    const builder = this.getBuilderForType(payload.graphType);
+    const graphType = payload.config?.configurable?.graphSettings?.graphType;
+    if (!graphType) {
+      throw new Error(
+        "GraphType is required in payload.config.configurable.graphSettings"
+      );
+    }
+    const builder = this.getBuilderForType(graphType);
 
     // Build graph
     const graph = await builder.buildGraph(payload);
 
     // Prepare execution configuration
-    const config = await builder.prepareConfig(payload);
+    const config = await builder.preparePayload(payload);
 
     // Track generation cancellation
     const abortController = new AbortController();
@@ -547,18 +516,22 @@ export class UniversalGraphService implements IGraphService {
     const abortController = new AbortController();
 
     try {
+      const graphType = payload.config?.configurable?.graphSettings?.graphType;
+      if (!graphType) {
+        throw new Error(
+          "GraphType is required in payload.config.configurable.graphSettings"
+        );
+      }
+
       // Existing code remains here
-      const builder = this.getBuilderForType(payload.graphType);
-      this.logger.debug(`Got builder for graph type: ${payload.graphType}`);
+      const builder = this.getBuilderForType(graphType);
+      this.logger.debug(`Got builder for graph type: ${graphType}`);
 
       // Build graph
       const graph = await builder.buildGraph(payload);
-      this.logger.debug(`Graph built for requestId: ${payload.requestId}`);
 
       // Prepare execution configuration
-      this.logger.debug(`Preparing config for requestId: ${payload.requestId}`);
-      const config = await builder.prepareConfig(payload);
-      this.logger.debug(`Config prepared`);
+      const graphRequest = await builder.preparePayload(payload);
 
       // Track generation cancellation
       this.registerActiveGeneration(payload.requestId, () => {
@@ -571,7 +544,7 @@ export class UniversalGraphService implements IGraphService {
       );
       const result = await this.engine.streamGraph(
         graph,
-        config,
+        graphRequest,
         onPartial,
         abortController.signal
       );
