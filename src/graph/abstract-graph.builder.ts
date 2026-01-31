@@ -183,11 +183,46 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
    * Prepare config for graph execution
    * Config comes ready from backend, just add input
    */
-  async prepareConfig(payload: IGraphRequestPayload): Promise<any> {
-    return {
+  async preparePayload(payload: IGraphRequestPayload): Promise<any> {
+    const config = await this.prepareConfig(payload);
+    return config;
+  }
+
+  /**
+   * Internal method to prepare config with input deserialization
+   */
+  protected async prepareConfig(payload: IGraphRequestPayload): Promise<any> {
+    // Deserialize input if it's a serialized LangChain object
+    let input = payload.input;
+    if (
+      payload.input &&
+      typeof payload.input === "object" &&
+      "lc" in payload.input
+    ) {
+      try {
+        const { load } = await import("@langchain/core/load");
+        input = await load(JSON.stringify(payload.input));
+        this.logger.debug({
+          message: "Deserialized BaseMessage using load()",
+          type: input.constructor?.name,
+        });
+      } catch (error) {
+        this.logger.warn({
+          message: "Failed to deserialize message",
+          error: error.message,
+        });
+      }
+    }
+
+    const baseConfig = {
       ...payload.config,
-      input: payload.input,
+      input,
     };
+
+    // Call customization hook - child classes can override this
+    const finalConfig = await this.customizeConfig(baseConfig, payload);
+
+    return finalConfig;
   }
 
   /**
@@ -432,7 +467,9 @@ export class UniversalGraphService implements IGraphService {
   ): Promise<IGraphResponsePayload> {
     const graphType = payload.config?.configurable?.graphSettings?.graphType;
     if (!graphType) {
-      throw new Error("GraphType is required in payload.config.configurable.graphSettings");
+      throw new Error(
+        "GraphType is required in payload.config.configurable.graphSettings"
+      );
     }
     const builder = this.getBuilderForType(graphType);
 
@@ -440,7 +477,7 @@ export class UniversalGraphService implements IGraphService {
     const graph = await builder.buildGraph(payload);
 
     // Prepare execution configuration
-    const config = await builder.prepareConfig(payload);
+    const config = await builder.preparePayload(payload);
 
     // Track generation cancellation
     const abortController = new AbortController();
@@ -481,7 +518,9 @@ export class UniversalGraphService implements IGraphService {
     try {
       const graphType = payload.config?.configurable?.graphSettings?.graphType;
       if (!graphType) {
-        throw new Error("GraphType is required in payload.config.configurable.graphSettings");
+        throw new Error(
+          "GraphType is required in payload.config.configurable.graphSettings"
+        );
       }
 
       // Existing code remains here
@@ -490,12 +529,9 @@ export class UniversalGraphService implements IGraphService {
 
       // Build graph
       const graph = await builder.buildGraph(payload);
-      this.logger.debug(`Graph built for requestId: ${payload.requestId}`);
 
       // Prepare execution configuration
-      this.logger.debug(`Preparing config for requestId: ${payload.requestId}`);
-      const config = await builder.prepareConfig(payload);
-      this.logger.debug(`Config prepared`);
+      const graphRequest = await builder.preparePayload(payload);
 
       // Track generation cancellation
       this.registerActiveGeneration(payload.requestId, () => {
@@ -508,7 +544,7 @@ export class UniversalGraphService implements IGraphService {
       );
       const result = await this.engine.streamGraph(
         graph,
-        config,
+        graphRequest,
         onPartial,
         abortController.signal
       );

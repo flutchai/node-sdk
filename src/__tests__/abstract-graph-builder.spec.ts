@@ -163,32 +163,9 @@ describe("AbstractGraphBuilder", () => {
     });
   });
 
-  describe("createGraphContext", () => {
-    it("should extract context from payload", () => {
-      const builder = new TestGraphBuilder();
-      const payload = {
-        threadId: "t-1",
-        userId: "u-1",
-        agentId: "a-1",
-        requestId: "r-1",
-        graphType: "test::1.0.0",
-        messageId: "m-1",
-        companyId: "c-1",
-      };
 
-      // createGraphContext is protected, access via any
-      const ctx = (builder as any).createGraphContext(payload);
-
-      expect(ctx.threadId).toBe("t-1");
-      expect(ctx.userId).toBe("u-1");
-      expect(ctx.agentId).toBe("a-1");
-      expect(ctx.messageId).toBe("m-1");
-      expect(ctx.companyId).toBe("c-1");
-    });
-  });
-
-  describe("prepareConfig", () => {
-    it("should return config with configurable block", async () => {
+  describe("preparePayload", () => {
+    it("should merge payload.config with input", async () => {
       const builder = new TestGraphBuilderWithManifest();
       const payload = {
         threadId: "t-1",
@@ -196,21 +173,28 @@ describe("AbstractGraphBuilder", () => {
         agentId: "a-1",
         requestId: "r-1",
         graphType: "acme.chatbot::2.0.0",
-        message: {} as any,
-        graphSettings: {},
+        input: { messages: [{ content: "hello" }] },
+        config: {
+          configurable: {
+            thread_id: "t-1",
+            context: {
+              threadId: "t-1",
+              userId: "u-1",
+              agentId: "a-1",
+            },
+            graphSettings: { modelId: "gpt-4" },
+          },
+        },
       };
 
-      const config = await builder.prepareConfig(payload);
+      const config = await builder.preparePayload(payload);
 
       expect(config.configurable.thread_id).toBe("t-1");
-      expect(config.configurable.context.userId).toBe("u-1");
-      expect(config.configurable.metadata.graphType).toBe(
-        "acme.chatbot::2.0.0"
-      );
-      expect(config.configurable.metadata.version).toBe("2.0.0");
+      expect(config.configurable.graphSettings.modelId).toBe("gpt-4");
+      expect(config.input).toEqual({ messages: [{ content: "hello" }] });
     });
 
-    it("should include checkpoint_ns and checkpoint_id", async () => {
+    it("should preserve config from payload", async () => {
       const builder = new TestGraphBuilderWithManifest();
       const payload = {
         threadId: "t-1",
@@ -218,100 +202,62 @@ describe("AbstractGraphBuilder", () => {
         agentId: "a-1",
         requestId: "r-1",
         graphType: "acme.chatbot::2.0.0",
-        message: {} as any,
-        graphSettings: {},
+        input: undefined,
+        config: {
+          configurable: {
+            thread_id: "t-1",
+            context: {
+              threadId: "t-1",
+              userId: "u-1",
+              agentId: "a-1",
+            },
+            checkpoint_ns: "acme.chatbot::2.0.0",
+            checkpoint_id: "t-1-123",
+            graphSettings: { modelId: "gpt-4" },
+          },
+        },
       };
 
-      const config = await builder.prepareConfig(payload);
+      const config = await builder.preparePayload(payload);
 
       expect(config.configurable.checkpoint_ns).toBe("acme.chatbot::2.0.0");
-      expect(config.configurable.checkpoint_id).toMatch(/^t-1-\d+$/);
+      expect(config.configurable.checkpoint_id).toBe("t-1-123");
+      expect(config.configurable.graphSettings.modelId).toBe("gpt-4");
     });
 
-    it("should include graphSettings from payload", async () => {
+    it("should set input when provided in payload", async () => {
       const builder = new TestGraphBuilderWithManifest();
+      const inputData = { messages: [{ content: "hello" }] };
       const payload = {
         threadId: "t-1",
         userId: "u-1",
         agentId: "a-1",
         requestId: "r-1",
         graphType: "acme.chatbot::2.0.0",
-        message: {} as any,
-        graphSettings: { systemPrompt: "Be helpful", modelId: "gpt-4" },
+        input: inputData,
+        config: {
+          configurable: {
+            thread_id: "t-1",
+            context: {
+              threadId: "t-1",
+              userId: "u-1",
+              agentId: "a-1",
+            },
+          },
+        },
       };
 
-      const config = await builder.prepareConfig(payload);
+      const config = await builder.preparePayload(payload);
 
-      expect(config.configurable.graphSettings).toEqual({
-        systemPrompt: "Be helpful",
-        modelId: "gpt-4",
-      });
-    });
-
-    it("should default graphSettings to empty object when not provided", async () => {
-      const builder = new TestGraphBuilderWithManifest();
-      const payload = {
-        threadId: "t-1",
-        userId: "u-1",
-        agentId: "a-1",
-        requestId: "r-1",
-        graphType: "acme.chatbot::2.0.0",
-        message: {} as any,
-        graphSettings: undefined as any,
-      };
-
-      const config = await builder.prepareConfig(payload);
-
-      expect(config.configurable.graphSettings).toEqual({});
-    });
-
-    it("should set input with messages array when message is provided", async () => {
-      const builder = new TestGraphBuilderWithManifest();
-      const message = { content: "hello" };
-      const payload = {
-        threadId: "t-1",
-        userId: "u-1",
-        agentId: "a-1",
-        requestId: "r-1",
-        graphType: "acme.chatbot::2.0.0",
-        message: message as any,
-        graphSettings: {},
-      };
-
-      const config = await builder.prepareConfig(payload);
-
-      expect(config.input).toBeDefined();
-      expect(config.input.messages).toHaveLength(1);
-      expect(config.input.messages[0]).toBe(message);
-    });
-
-    it("should include workflowType in metadata", async () => {
-      const builder = new TestGraphBuilderWithManifest();
-      const payload = {
-        threadId: "t-1",
-        userId: "u-1",
-        agentId: "a-1",
-        requestId: "r-1",
-        graphType: "acme.chatbot::2.0.0",
-        message: {} as any,
-        graphSettings: {},
-      };
-
-      const config = await builder.prepareConfig(payload);
-
-      expect(config.configurable.metadata.workflowType).toBe(
-        "acme.chatbot::2.0.0"
-      );
+      expect(config.input).toEqual(inputData);
     });
   });
 
   describe("customizeConfig", () => {
     it("should be called during prepareConfig and can modify config", async () => {
       class CustomBuilder extends TestGraphBuilderWithManifest {
-        protected async customizeConfig(
-          config: any,
-          _payload: any
-        ): Promise<any> {
+        protected async customizeConfig(config: any, _payload: any): Promise<any> {
+          config.configurable = config.configurable || {};
           config.configurable.customField = "custom-value";
           return config;
         }
@@ -324,21 +270,30 @@ describe("AbstractGraphBuilder", () => {
         agentId: "a-1",
         requestId: "r-1",
         graphType: "acme.chatbot::2.0.0",
-        message: {} as any,
-        graphSettings: {},
+        input: undefined,
+        config: {
+          configurable: {
+            thread_id: "t-1",
+            context: {
+              threadId: "t-1",
+              userId: "u-1",
+              agentId: "a-1",
+            },
+          },
+        },
       };
 
-      const config = await builder.prepareConfig(payload);
+      const config = await builder.preparePayload(payload);
 
       expect(config.configurable.customField).toBe("custom-value");
     });
   });
 
-  describe("prepareConfig - message deserialization", () => {
-    it("should deserialize LangChain-serialized message (lc format)", async () => {
+  describe("preparePayload - input deserialization", () => {
+    it("should deserialize LangChain-serialized input (lc format)", async () => {
       const builder = new TestGraphBuilderWithManifest();
       // Simulate a serialized LangChain message with lc property
-      const serializedMessage = {
+      const serializedInput = {
         lc: 1,
         type: "constructor",
         id: ["langchain_core", "messages", "HumanMessage"],
@@ -351,22 +306,28 @@ describe("AbstractGraphBuilder", () => {
         agentId: "a-1",
         requestId: "r-1",
         graphType: "acme.chatbot::2.0.0",
-        message: serializedMessage as any,
-        graphSettings: {},
+        input: serializedInput as any,
+        config: {
+          configurable: {
+            thread_id: "t-1",
+            context: {
+              threadId: "t-1",
+              userId: "u-1",
+              agentId: "a-1",
+            },
+          },
+        },
       };
 
-      const config = await builder.prepareConfig(payload);
+      const config = await builder.preparePayload(payload);
 
-      // Should have input with messages array
+      // Should have input deserialized
       expect(config.input).toBeDefined();
-      expect(config.input.messages).toHaveLength(1);
-      // The deserialized message should be a HumanMessage instance (or fallback to original if load fails)
-      expect(config.input.messages[0]).toBeDefined();
     });
 
-    it("should keep non-lc message as-is", async () => {
+    it("should keep non-lc input as-is", async () => {
       const builder = new TestGraphBuilderWithManifest();
-      const plainMessage = { content: "plain", role: "user" };
+      const plainInput = { messages: [{ content: "plain", role: "user" }] };
 
       const payload = {
         threadId: "t-1",
@@ -374,16 +335,25 @@ describe("AbstractGraphBuilder", () => {
         agentId: "a-1",
         requestId: "r-1",
         graphType: "acme.chatbot::2.0.0",
-        message: plainMessage as any,
-        graphSettings: {},
+        input: plainInput as any,
+        config: {
+          configurable: {
+            thread_id: "t-1",
+            context: {
+              threadId: "t-1",
+              userId: "u-1",
+              agentId: "a-1",
+            },
+          },
+        },
       };
 
-      const config = await builder.prepareConfig(payload);
+      const config = await builder.preparePayload(payload);
 
-      expect(config.input.messages[0]).toBe(plainMessage);
+      expect(config.input).toEqual(plainInput);
     });
 
-    it("should set input to undefined when message is falsy", async () => {
+    it("should handle undefined input", async () => {
       const builder = new TestGraphBuilderWithManifest();
       const payload = {
         threadId: "t-1",
@@ -391,11 +361,20 @@ describe("AbstractGraphBuilder", () => {
         agentId: "a-1",
         requestId: "r-1",
         graphType: "acme.chatbot::2.0.0",
-        message: null as any,
-        graphSettings: {},
+        input: undefined,
+        config: {
+          configurable: {
+            thread_id: "t-1",
+            context: {
+              threadId: "t-1",
+              userId: "u-1",
+              agentId: "a-1",
+            },
+          },
+        },
       };
 
-      const config = await builder.prepareConfig(payload);
+      const config = await builder.preparePayload(payload);
 
       expect(config.input).toBeUndefined();
     });
@@ -433,7 +412,7 @@ describe("UniversalGraphService", () => {
     mockBuilder = {
       graphType: "test::1.0.0",
       buildGraph: jest.fn().mockResolvedValue({ compiled: true }),
-      prepareConfig: jest.fn().mockResolvedValue({
+      preparePayload: jest.fn().mockResolvedValue({
         configurable: { thread_id: "t-1" },
       }),
       constructor: { name: "TestBuilder" },
@@ -490,14 +469,26 @@ describe("UniversalGraphService", () => {
         threadId: "t-1",
         userId: "u-1",
         agentId: "a-1",
-        message: {} as any,
-        graphSettings: {},
+        input: { messages: [] },
+        config: {
+          configurable: {
+            thread_id: "t-1",
+            context: {
+              threadId: "t-1",
+              userId: "u-1",
+              agentId: "a-1",
+            },
+            graphSettings: {
+              graphType: "test::1.0.0",
+            },
+          },
+        },
       };
 
       const result = await service.generateAnswer(payload);
 
       expect(mockBuilder.buildGraph).toHaveBeenCalledWith(payload);
-      expect(mockBuilder.prepareConfig).toHaveBeenCalledWith(payload);
+      expect(mockBuilder.preparePayload).toHaveBeenCalledWith(payload);
       expect(mockEngine.invokeGraph).toHaveBeenCalled();
       expect(result.requestId).toBe("r-1");
       expect(result.text).toBe("Hello");
@@ -510,8 +501,20 @@ describe("UniversalGraphService", () => {
         threadId: "t-1",
         userId: "u-1",
         agentId: "a-1",
-        message: {} as any,
-        graphSettings: {},
+        input: { messages: [] },
+        config: {
+          configurable: {
+            thread_id: "t-1",
+            context: {
+              threadId: "t-1",
+              userId: "u-1",
+              agentId: "a-1",
+            },
+            graphSettings: {
+              graphType: "unknown::1.0.0",
+            },
+          },
+        },
       };
 
       await expect(service.generateAnswer(payload)).rejects.toThrow(

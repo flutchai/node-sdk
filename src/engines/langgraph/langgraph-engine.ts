@@ -28,6 +28,55 @@ export class LangGraphEngine implements IGraphEngine {
   }
 
   /**
+   * Deserialize input recursively
+   * Handles serialized LangChain objects at any level of nesting
+   */
+  private async deserializeInput(input: any): Promise<any> {
+    const { load } = await import("@langchain/core/load");
+
+    // Helper function to deserialize a single value
+    const deserializeValue = async (value: any): Promise<any> => {
+      // Case 1: Value is a serialized LangChain object (has lc property)
+      if (value && typeof value === "object" && "lc" in value) {
+        try {
+          const deserialized = await load(JSON.stringify(value));
+          this.logger.debug({
+            message: "Deserialized LangChain object",
+            type: deserialized.constructor?.name,
+          });
+          return deserialized;
+        } catch (error) {
+          this.logger.warn({
+            message: "Failed to deserialize LangChain object",
+            error: error.message,
+          });
+          return value;
+        }
+      }
+
+      // Case 2: Value is an array - deserialize each element
+      if (Array.isArray(value)) {
+        return await Promise.all(value.map(item => deserializeValue(item)));
+      }
+
+      // Case 3: Value is a plain object - deserialize each property
+      if (value && typeof value === "object" && value.constructor === Object) {
+        const result: any = {};
+        for (const [key, val] of Object.entries(value)) {
+          result[key] = await deserializeValue(val);
+        }
+        return result;
+      }
+
+      // Case 4: Primitive value - return as is
+      return value;
+    };
+
+    // Start recursive deserialization from the root
+    return await deserializeValue(input);
+  }
+
+  /**
    * Method to invoke LangGraph
    */
   async invokeGraph(
@@ -40,9 +89,12 @@ export class LangGraphEngine implements IGraphEngine {
       config.signal = signal;
     }
 
+    // Deserialize input if needed
+    const input = await this.deserializeInput(config.input || {});
+
     // Invoke the graph with recursion limit to prevent infinite loops
     const recursionLimit = config.recursionLimit ?? DEFAULT_RECURSION_LIMIT;
-    const result = await graph.invoke(config.input || {}, {
+    const result = await graph.invoke(input, {
       ...config,
       recursionLimit,
     });
@@ -53,7 +105,7 @@ export class LangGraphEngine implements IGraphEngine {
 
   async streamGraph(
     graph: any,
-    config: any,
+    preparedPayload: any,
     onPartial: (chunk: string) => void,
     signal?: AbortSignal
   ): Promise<any> {
@@ -61,14 +113,36 @@ export class LangGraphEngine implements IGraphEngine {
     const acc = this.eventProcessor.createAccumulator();
     let streamError: Error | null = null;
 
+    this.logger.debug({
+      message: "[ENGINE] streamGraph called",
+      hasSignal: !!signal,
+      signalType: signal?.constructor?.name,
+      hasAborted: signal?.aborted,
+    });
+
     try {
       if (signal) {
-        config.signal = signal;
+        preparedPayload.signal = signal;
+        this.logger.debug("[ENGINE] Signal assigned to preparedPayload.signal");
       }
+
+      const input = await this.deserializeInput(preparedPayload.input || {});
+
       //TODO: migrate to v.1
-      const recursionLimit = config.recursionLimit ?? DEFAULT_RECURSION_LIMIT;
-      const eventStream = await graph.streamEvents(config.input || {}, {
-        ...config,
+      const recursionLimit =
+        preparedPayload.recursionLimit ?? DEFAULT_RECURSION_LIMIT;
+
+      this.logger.debug({
+        message: "[ENGINE] Calling streamEvents",
+        hasSignalInPayload: !!preparedPayload.signal,
+        signalAborted: preparedPayload.signal?.aborted,
+        configKeys: Object.keys(preparedPayload.config || {}),
+        hasSignalInConfig: !!(preparedPayload.config as any)?.signal,
+      });
+
+      const eventStream = await graph.streamEvents(input, {
+        ...preparedPayload.config,
+        signal: preparedPayload.signal, // Include abort signal
         version: "v2", // Important for correct operation
         recursionLimit, // Prevent GraphRecursionError (default is 25)
       });
@@ -93,7 +167,7 @@ export class LangGraphEngine implements IGraphEngine {
     } finally {
       // ALWAYS try to send trace events, even if graph failed
       // This ensures we capture metrics for billing even on errors
-      await this.sendTraceFromAccumulator(acc, config, streamError);
+      await this.sendTraceFromAccumulator(acc, preparedPayload, streamError);
     }
 
     // Get final result from accumulator
@@ -101,7 +175,7 @@ export class LangGraphEngine implements IGraphEngine {
 
     this.logger.debug("[STREAM-RESULT] Got result from EventProcessor", {
       hasContent: !!content,
-      hasContext: !!config.configurable?.context,
+      hasContext: !!preparedPayload.configurable?.context,
       hasTrace: !!trace,
       traceEvents: trace?.events?.length || 0,
       hadError: !!streamError,

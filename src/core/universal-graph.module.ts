@@ -92,7 +92,9 @@ function createMetaBuilder(
     async buildGraph(payload: IGraphRequestPayload): Promise<any> {
       const graphType = payload.config?.configurable?.graphSettings?.graphType;
       if (!graphType) {
-        throw new Error("GraphType is required in payload.config.configurable.graphSettings");
+        throw new Error(
+          "GraphType is required in payload.config.configurable.graphSettings"
+        );
       }
 
       const resolution = await versionedGraphService.resolveVersion(graphType, {
@@ -114,10 +116,12 @@ function createMetaBuilder(
       }
     }
 
-    async prepareConfig(payload: IGraphRequestPayload): Promise<any> {
+    async preparePayload(payload: IGraphRequestPayload): Promise<any> {
       const graphType = payload.config?.configurable?.graphSettings?.graphType;
       if (!graphType) {
-        throw new Error("GraphType is required in payload.config.configurable.graphSettings");
+        throw new Error(
+          "GraphType is required in payload.config.configurable.graphSettings"
+        );
       }
 
       const resolution = await versionedGraphService.resolveVersion(graphType, {
@@ -438,7 +442,7 @@ export class UniversalGraphModule {
                   );
                 }
 
-                async prepareConfig(payload: any): Promise<any> {
+                async preparePayload(payload: any): Promise<any> {
                   throw new Error(
                     "ModuleRef not available - cannot prepare config"
                   );
