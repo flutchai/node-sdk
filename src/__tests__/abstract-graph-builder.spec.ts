@@ -186,11 +186,11 @@ describe("AbstractGraphBuilder", () => {
         },
       };
 
-      const config = await builder.preparePayload(payload);
+      const result = await builder.preparePayload(payload);
 
-      expect(config.configurable.thread_id).toBe("t-1");
-      expect(config.configurable.graphSettings.modelId).toBe("gpt-4");
-      expect(config.input).toEqual({ messages: [{ content: "hello" }] });
+      expect(result.config.configurable.thread_id).toBe("t-1");
+      expect(result.config.configurable.graphSettings.modelId).toBe("gpt-4");
+      expect(result.input).toEqual({ messages: [{ content: "hello" }] });
     });
 
     it("should preserve config from payload", async () => {
@@ -217,11 +217,11 @@ describe("AbstractGraphBuilder", () => {
         },
       };
 
-      const config = await builder.preparePayload(payload);
+      const result = await builder.preparePayload(payload);
 
-      expect(config.configurable.checkpoint_ns).toBe("acme.chatbot::2.0.0");
-      expect(config.configurable.checkpoint_id).toBe("t-1-123");
-      expect(config.configurable.graphSettings.modelId).toBe("gpt-4");
+      expect(result.config.configurable.checkpoint_ns).toBe("acme.chatbot::2.0.0");
+      expect(result.config.configurable.checkpoint_id).toBe("t-1-123");
+      expect(result.config.configurable.graphSettings.modelId).toBe("gpt-4");
     });
 
     it("should set input when provided in payload", async () => {
@@ -255,13 +255,17 @@ describe("AbstractGraphBuilder", () => {
   describe("customizeConfig", () => {
     it("should be called during prepareConfig and can modify config", async () => {
       class CustomBuilder extends TestGraphBuilderWithManifest {
-        protected async customizeConfig(
-          config: any,
-          _payload: any
-        ): Promise<any> {
-          config.configurable = config.configurable || {};
-          config.configurable.customField = "custom-value";
-          return config;
+        protected async customizeConfig(payload: any): Promise<any> {
+          return {
+            ...payload,
+            config: {
+              ...payload.config,
+              configurable: {
+                ...payload.config.configurable,
+                customField: "custom-value",
+              },
+            },
+          };
         }
       }
 
@@ -285,9 +289,9 @@ describe("AbstractGraphBuilder", () => {
         },
       };
 
-      const config = await builder.preparePayload(payload);
+      const result = await builder.preparePayload(payload);
 
-      expect(config.configurable.customField).toBe("custom-value");
+      expect(result.config.configurable.customField).toBe("custom-value");
     });
   });
 

@@ -213,9 +213,7 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
    * }
    * ```
    */
-  protected async customizeConfig(
-    payload: IGraphRequestPayload
-  ): Promise<any> {
+  protected async customizeConfig(payload: IGraphRequestPayload): Promise<any> {
     // Default implementation - just return payload as is
     return payload;
   }

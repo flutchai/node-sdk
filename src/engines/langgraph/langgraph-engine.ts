@@ -78,7 +78,7 @@ export class LangGraphEngine implements IGraphEngine {
     preparedPayload: any,
     signal?: AbortSignal
   ): Promise<any> {
-    this.logger.debug('invokeGraph preparedPayload', preparedPayload);
+    this.logger.debug("invokeGraph preparedPayload", preparedPayload);
 
     // Add abort signal to configuration
     if (signal) {
