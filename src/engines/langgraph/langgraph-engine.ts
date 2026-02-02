@@ -2,12 +2,6 @@ import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { IGraphEngine } from "../../core";
 import { EventProcessor } from "./event-processor.utils";
 import { ConfigService } from "@nestjs/config";
-/**
- * Default recursion limit for LangGraph execution.
- * Prevents infinite loops in agent execution.
- * LangGraph default is 25, we use 40 for complex multi-tool workflows.
- */
-const DEFAULT_RECURSION_LIMIT = 40;
 
 /**
  * Graph engine implemented using LangGraph.js
@@ -81,22 +75,23 @@ export class LangGraphEngine implements IGraphEngine {
    */
   async invokeGraph(
     graph: any,
-    config: any,
+    preparedPayload: any,
     signal?: AbortSignal
   ): Promise<any> {
+    this.logger.debug("invokeGraph preparedPayload", preparedPayload);
+
     // Add abort signal to configuration
     if (signal) {
-      config.signal = signal;
+      preparedPayload.signal = signal;
+      this.logger.debug("[ENGINE] Signal assigned to preparedPayload.signal");
     }
 
     // Deserialize input if needed
-    const input = await this.deserializeInput(config.input || {});
+    const input = await this.deserializeInput(preparedPayload.input || {});
 
-    // Invoke the graph with recursion limit to prevent infinite loops
-    const recursionLimit = config.recursionLimit ?? DEFAULT_RECURSION_LIMIT;
     const result = await graph.invoke(input, {
-      ...config,
-      recursionLimit,
+      ...preparedPayload.config,
+      signal: preparedPayload.signal,
     });
 
     // Transform the result
@@ -128,23 +123,10 @@ export class LangGraphEngine implements IGraphEngine {
 
       const input = await this.deserializeInput(preparedPayload.input || {});
 
-      //TODO: migrate to v.1
-      const recursionLimit =
-        preparedPayload.recursionLimit ?? DEFAULT_RECURSION_LIMIT;
-
-      this.logger.debug({
-        message: "[ENGINE] Calling streamEvents",
-        hasSignalInPayload: !!preparedPayload.signal,
-        signalAborted: preparedPayload.signal?.aborted,
-        configKeys: Object.keys(preparedPayload.config || {}),
-        hasSignalInConfig: !!(preparedPayload.config as any)?.signal,
-      });
-
       const eventStream = await graph.streamEvents(input, {
         ...preparedPayload.config,
         signal: preparedPayload.signal, // Include abort signal
         version: "v2", // Important for correct operation
-        recursionLimit, // Prevent GraphRecursionError (default is 25)
       });
 
       // Process the event stream

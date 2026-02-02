@@ -181,77 +181,41 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
 
   /**
    * Prepare config for graph execution
-   * Config comes ready from backend, just add input
+   * Deserialization happens in engine, so just pass through with customization hook
    */
   async preparePayload(payload: IGraphRequestPayload): Promise<any> {
-    const config = await this.prepareConfig(payload);
-    return config;
-  }
-
-  /**
-   * Internal method to prepare config with input deserialization
-   */
-  protected async prepareConfig(payload: IGraphRequestPayload): Promise<any> {
-    // Deserialize input if it's a serialized LangChain object
-    let input = payload.input;
-    if (
-      payload.input &&
-      typeof payload.input === "object" &&
-      "lc" in payload.input
-    ) {
-      try {
-        const { load } = await import("@langchain/core/load");
-        input = await load(JSON.stringify(payload.input));
-        this.logger.debug({
-          message: "Deserialized BaseMessage using load()",
-          type: input.constructor?.name,
-        });
-      } catch (error) {
-        this.logger.warn({
-          message: "Failed to deserialize message",
-          error: error.message,
-        });
-      }
-    }
-
-    const baseConfig = {
-      ...payload.config,
-      input,
-    };
-
     // Call customization hook - child classes can override this
-    const finalConfig = await this.customizeConfig(baseConfig, payload);
-
-    return finalConfig;
+    const finalPayload = await this.customizeConfig(payload);
+    return finalPayload;
   }
 
   /**
-   * Hook for customizing config after base preparation
+   * Hook for customizing config before graph execution
    * Override this method in child classes to add/modify config fields
    *
-   * @param config - Base config prepared by SDK
-   * @param payload - Original request payload
-   * @returns Modified config
+   * @param payload - Original request payload with input and config
+   * @returns Modified payload
    *
    * @example
    * ```typescript
-   * protected async customizeConfig(config: any, payload: IGraphRequestPayload): Promise<any> {
-   *   // Add custom fields
-   *   config.configurable.myCustomField = "value";
-   *
-   *   // Modify existing fields
-   *   config.configurable.context.customData = await this.loadCustomData(payload);
-   *
-   *   return config;
+   * protected async customizeConfig(payload: IGraphRequestPayload): Promise<any> {
+   *   // Add custom fields to config
+   *   return {
+   *     ...payload,
+   *     config: {
+   *       ...payload.config,
+   *       configurable: {
+   *         ...payload.config.configurable,
+   *         myCustomField: "value",
+   *       },
+   *     },
+   *   };
    * }
    * ```
    */
-  protected async customizeConfig(
-    config: any,
-    payload: IGraphRequestPayload
-  ): Promise<any> {
-    // Default implementation - just return config as is
-    return config;
+  protected async customizeConfig(payload: IGraphRequestPayload): Promise<any> {
+    // Default implementation - just return payload as is
+    return payload;
   }
 
   /**

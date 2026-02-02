@@ -368,17 +368,17 @@ describe("LangGraphEngine", () => {
         }),
       };
 
-      const config = {
+      const preparedPayload = {
         input: { messages: [{ content: "test" }] },
+        config: {},
       };
 
       // Act
-      const result = await engine.invokeGraph(mockGraph, config);
+      const result = await engine.invokeGraph(mockGraph, preparedPayload);
 
       // Assert
-      expect(mockGraph.invoke).toHaveBeenCalledWith(config.input, {
-        ...config,
-        recursionLimit: 40,
+      expect(mockGraph.invoke).toHaveBeenCalledWith(preparedPayload.input, {
+        signal: undefined,
       });
       expect(result).toEqual({
         text: "Invoked response",
@@ -398,23 +398,28 @@ describe("LangGraphEngine", () => {
         }),
       };
 
-      const config = {
+      const preparedPayload = {
         input: { messages: [{ content: "test" }] },
+        config: {},
       };
 
       // Act
-      await engine.invokeGraph(mockGraph, config, abortController.signal);
+      await engine.invokeGraph(
+        mockGraph,
+        preparedPayload,
+        abortController.signal
+      );
 
       // Assert
       expect(mockGraph.invoke).toHaveBeenCalledWith(
-        config.input,
+        preparedPayload.input,
         expect.objectContaining({
           signal: abortController.signal,
         })
       );
     });
 
-    it("should use default recursionLimit of 49 when not specified", async () => {
+    it("should use config from preparedPayload", async () => {
       // Arrange
       const mockGraph = {
         invoke: jest.fn().mockResolvedValue({
@@ -424,23 +429,25 @@ describe("LangGraphEngine", () => {
         }),
       };
 
-      const config = {
+      const preparedPayload = {
         input: { messages: [{ content: "test" }] },
+        config: { recursionLimit: 50 },
       };
 
       // Act
-      await engine.invokeGraph(mockGraph, config);
+      await engine.invokeGraph(mockGraph, preparedPayload);
 
       // Assert
       expect(mockGraph.invoke).toHaveBeenCalledWith(
-        config.input,
+        preparedPayload.input,
         expect.objectContaining({
-          recursionLimit: 40,
+          recursionLimit: 50,
+          signal: undefined,
         })
       );
     });
 
-    it("should allow custom recursionLimit to be passed via config", async () => {
+    it("should pass through config properties from preparedPayload", async () => {
       // Arrange
       const mockGraph = {
         invoke: jest.fn().mockResolvedValue({
@@ -450,27 +457,31 @@ describe("LangGraphEngine", () => {
         }),
       };
 
-      const customRecursionLimit = 100;
-      const config = {
+      const preparedPayload = {
         input: { messages: [{ content: "test" }] },
-        recursionLimit: customRecursionLimit,
+        config: {
+          recursionLimit: 100,
+          configurable: { customProp: "value" },
+        },
       };
 
       // Act
-      await engine.invokeGraph(mockGraph, config);
+      await engine.invokeGraph(mockGraph, preparedPayload);
 
       // Assert
       expect(mockGraph.invoke).toHaveBeenCalledWith(
-        config.input,
+        preparedPayload.input,
         expect.objectContaining({
-          recursionLimit: customRecursionLimit,
+          recursionLimit: 100,
+          configurable: { customProp: "value" },
+          signal: undefined,
         })
       );
     });
   });
 });
 
-describe("LangGraphEngine - recursionLimit in streamGraph", () => {
+describe("LangGraphEngine - config in streamGraph", () => {
   let engine: LangGraphEngine;
   let mockEventProcessor: EventProcessor;
 
@@ -479,7 +490,7 @@ describe("LangGraphEngine - recursionLimit in streamGraph", () => {
     engine = new LangGraphEngine(mockEventProcessor, undefined);
   });
 
-  it("should use default recursionLimit of 49 in streamGraph when not specified", async () => {
+  it("should use config from preparedPayload in streamGraph", async () => {
     // Arrange
     const mockGraph = {
       streamEvents: jest.fn().mockImplementation(async function* () {
@@ -487,25 +498,27 @@ describe("LangGraphEngine - recursionLimit in streamGraph", () => {
       }),
     };
 
-    const config = {
+    const preparedPayload = {
       input: { messages: [{ content: "test" }] },
-      configurable: {},
+      config: {
+        configurable: {},
+      },
     };
 
     // Act
-    await engine.streamGraph(mockGraph, config, jest.fn());
+    await engine.streamGraph(mockGraph, preparedPayload, jest.fn());
 
     // Assert
     expect(mockGraph.streamEvents).toHaveBeenCalledWith(
-      config.input,
+      preparedPayload.input,
       expect.objectContaining({
-        recursionLimit: 40,
         version: "v2",
+        signal: undefined,
       })
     );
   });
 
-  it("should allow custom recursionLimit in streamGraph via config", async () => {
+  it("should pass through all config properties in streamGraph", async () => {
     // Arrange
     const mockGraph = {
       streamEvents: jest.fn().mockImplementation(async function* () {
@@ -513,21 +526,24 @@ describe("LangGraphEngine - recursionLimit in streamGraph", () => {
       }),
     };
 
-    const customRecursionLimit = 75;
-    const config = {
+    const preparedPayload = {
       input: { messages: [{ content: "test" }] },
-      configurable: {},
-      recursionLimit: customRecursionLimit,
+      config: {
+        configurable: {},
+        recursionLimit: 75,
+        customProp: "value",
+      },
     };
 
     // Act
-    await engine.streamGraph(mockGraph, config, jest.fn());
+    await engine.streamGraph(mockGraph, preparedPayload, jest.fn());
 
     // Assert
     expect(mockGraph.streamEvents).toHaveBeenCalledWith(
-      config.input,
+      preparedPayload.input,
       expect.objectContaining({
-        recursionLimit: customRecursionLimit,
+        recursionLimit: 75,
+        customProp: "value",
         version: "v2",
       })
     );
