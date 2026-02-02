@@ -152,7 +152,7 @@ function createMetaBuilder(
         },
       };
 
-      return versionedBuilder.prepareConfig(updatedPayload);
+      return versionedBuilder.preparePayload(updatedPayload);
     }
   }
 
