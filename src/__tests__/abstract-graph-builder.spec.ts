@@ -219,7 +219,9 @@ describe("AbstractGraphBuilder", () => {
 
       const result = await builder.preparePayload(payload);
 
-      expect(result.config.configurable.checkpoint_ns).toBe("acme.chatbot::2.0.0");
+      expect(result.config.configurable.checkpoint_ns).toBe(
+        "acme.chatbot::2.0.0"
+      );
       expect(result.config.configurable.checkpoint_id).toBe("t-1-123");
       expect(result.config.configurable.graphSettings.modelId).toBe("gpt-4");
     });

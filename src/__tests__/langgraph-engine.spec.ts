@@ -404,7 +404,11 @@ describe("LangGraphEngine", () => {
       };
 
       // Act
-      await engine.invokeGraph(mockGraph, preparedPayload, abortController.signal);
+      await engine.invokeGraph(
+        mockGraph,
+        preparedPayload,
+        abortController.signal
+      );
 
       // Assert
       expect(mockGraph.invoke).toHaveBeenCalledWith(
