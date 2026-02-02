@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-02-02
+
+### Changed
+
+- **BREAKING:** Refactored payload preparation flow:
+  - Renamed `prepareConfig()` to `preparePayload()` in `AbstractGraphBuilder` to better reflect that it returns full payload structure
+  - `customizeConfig()` hook now accepts full `payload` parameter instead of separate `config` and `payload` arguments
+  - `customizeConfig()` now returns modified payload instead of just config
+  - `LangGraphEngine.invokeGraph()` and `streamGraph()` now expect `preparedPayload` structure with `{ input, config, signal }` fields
+- Removed recursion limit handling from SDK (now managed by backend in payload.config)
+- Simplified engine methods to use `preparedPayload.config` directly without internal defaults
+
+### Migration
+
+Update your `customizeConfig` implementation:
+
+```typescript
+// Before (0.2.2)
+protected async customizeConfig(config: any, payload: IGraphRequestPayload): Promise<any> {
+  config.configurable.myField = "value";
+  return config;
+}
+
+// After (0.2.3)
+protected async customizeConfig(payload: IGraphRequestPayload): Promise<any> {
+  return {
+    ...payload,
+    config: {
+      ...payload.config,
+      configurable: {
+        ...payload.config.configurable,
+        myField: "value",
+      },
+    },
+  };
+}
+```
+
 ## [0.2.2] - 2026-01-30
 
 ### Added
