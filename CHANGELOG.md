@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-02-03
+
+### Added
+
+- `executeToolWithAttachments` function for attachment-aware tool execution in LangGraph nodes
+- Automatic large result detection: when tool output exceeds threshold, data is stored as attachment and LLM receives only a summary
+- Auto-injection of attachment data into subsequent tool calls when data argument is missing
+- Configurable parameters: `threshold`, `injectIntoArg`, `sourceAttachmentId` for flexible integration
+- `DEFAULT_ATTACHMENT_THRESHOLD` constant (configurable via `ATTACHMENT_THRESHOLD` env variable)
+- 19 unit tests for attachment-tool-node covering injection logic, threshold handling, and error cases
+
+### Changed
+
+- `shouldInjectData` logic: now only injects when argument is truly `undefined`, not when it has any falsy value (fixes overwriting user-provided empty strings, 0, false, null)
+
 ## [0.2.3] - 2026-02-02
 
 ### Changed
@@ -415,7 +430,12 @@ export class MyBuilder extends ExternalGraphBuilder<"1.0.0"> { ... }
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.1.27...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/flutchai/node-sdk/compare/v0.2.3...v0.2.4
+[0.2.3]: https://github.com/flutchai/node-sdk/compare/v0.2.2...v0.2.3
+[0.2.2]: https://github.com/flutchai/node-sdk/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/flutchai/node-sdk/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/flutchai/node-sdk/compare/v0.1.27...v0.2.0
 [0.1.27]: https://github.com/flutchai/node-sdk/compare/v0.1.26...v0.1.27
 [0.1.26]: https://github.com/flutchai/node-sdk/compare/v0.1.25...v0.1.26
 [0.1.25]: https://github.com/flutchai/node-sdk/compare/v0.1.24...v0.1.25
