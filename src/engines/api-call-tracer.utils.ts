@@ -11,7 +11,7 @@ export interface ApiCallTracerOptions {
 }
 
 export const DEFAULT_TRACER_OPTIONS: Required<ApiCallTracerOptions> = {
-  maxStringLength: 5000,
+  maxStringLength: 100000, // 100KB - enough for most tool outputs, prevents overflow
   maxDepth: 15,
 };
 
@@ -126,7 +126,12 @@ export function sanitizeTraceData(
   }
 
   if (typeof value === "string") {
-    // No truncation - we need full tool inputs/outputs for proper processing
+    // Truncate very large strings to prevent "Invalid string length" errors
+    // during trace serialization. 100KB limit preserves most useful data
+    // while preventing overflow from huge tool outputs (e.g., 500MB DB results)
+    if (value.length > opts.maxStringLength) {
+      return `${value.slice(0, opts.maxStringLength)}… [truncated: ${value.length - opts.maxStringLength} chars]`;
+    }
     return value;
   }
 
