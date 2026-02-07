@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-02-07
+
+### Fixed
+
+- **Critical**: Fixed memory leak in `attachmentDataStore` — global in-memory Map was never cleaned up, causing unbounded memory growth with large tool results (e.g. 509MB PostgreSQL queries)
+- **Critical**: Fixed race condition — `attachmentDataStore` is now scoped by `threadId` to isolate data between concurrent graph executions
+- Fixed `null` data fallback in auto-injection: when both in-memory store is empty and graph state has `data: null`, injection is now correctly skipped (was injecting `"null"` string)
+- Fixed JSON truncation in `on_tool_end`: tool output is now cut at the last newline boundary (within 80% of limit) instead of mid-token, preventing broken JSON structures
+- Fixed `extractAttachments` filter: `IGraphAttachment` objects (internal, with `data`/`summary`/`toolName` fields) no longer leak into `IAttachment[]` (message attachments requiring `type`/`value` fields)
+- Fixed `JSON.stringify` crash on very large tool outputs (509MB) in `on_tool_end` handler with try/catch fallback
+- Restored string truncation in `sanitizeTraceData` at 100KB limit to prevent `Invalid string length` errors during trace serialization
+
+### Changed
+
+- `attachmentDataStore` refactored from flat `Map<string, any>` to nested `Map<threadId, Map<toolCallId, data>>` for thread isolation
+- `storeAttachmentData`, `getAttachmentData`, `clearAttachmentDataStore` now accept optional `threadId` parameter
+- `ExecuteToolWithAttachmentsParams` now accepts optional `threadId` for scoping data store
+- `LangGraphEngine.streamGraph()` and `invokeGraph()` now call `clearAttachmentDataStore(threadId)` in `finally` blocks
+- Auto-cleanup safety net: thread data is automatically deleted after 10 minutes if `clearAttachmentDataStore` is not called
+
+### Added
+
+- 12 new tests in `attachment-data-store.spec.ts` covering thread isolation, cleanup, auto-cleanup timer, and null data fallback
+- Integration test `attachment-message-size.spec.ts` simulating full flow: 9000-row PostgreSQL query through EventProcessor, verifying MongoDB 16MB BSON limit compliance
+
 ## [0.2.4] - 2026-02-03
 
 ### Added
@@ -430,7 +455,8 @@ export class MyBuilder extends ExternalGraphBuilder<"1.0.0"> { ... }
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/flutchai/node-sdk/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/flutchai/node-sdk/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/flutchai/node-sdk/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/flutchai/node-sdk/compare/v0.2.1...v0.2.2

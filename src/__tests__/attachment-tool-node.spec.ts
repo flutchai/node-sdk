@@ -174,7 +174,7 @@ describe("attachment-tool-node", () => {
 
         expect(result.attachment).toBeDefined();
         expect(result.attachment!.key).toBe("call_123");
-        expect(result.attachment!.value.data).toEqual(largeData);
+        expect(result.attachment!.value.data).toBeNull(); // Data stored in memory, not in state
         expect(result.attachment!.value.toolName).toBe("test_tool");
         expect(result.toolMessage.content).toContain("100 rows");
         expect(result.toolMessage.content).toContain(

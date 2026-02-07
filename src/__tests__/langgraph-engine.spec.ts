@@ -4,6 +4,11 @@ import {
   StreamAccumulator,
 } from "../engines/langgraph/event-processor.utils";
 import { ConfigService } from "@nestjs/config";
+import {
+  storeAttachmentData,
+  getAttachmentData,
+  clearAttachmentDataStore,
+} from "../graph/attachment-tool-node";
 
 // Mock fetch globally
 const mockFetch = jest.fn();
@@ -660,5 +665,107 @@ describe("LangGraphEngine - Error Trace Preservation", () => {
     expect(requestBody.error.message).toBe(
       "Tool execution failed: API timeout"
     );
+  });
+});
+
+describe("LangGraphEngine - extractThreadId & cleanup", () => {
+  let engine: LangGraphEngine;
+  let mockEventProcessor: jest.Mocked<EventProcessor>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    clearAttachmentDataStore();
+
+    mockEventProcessor = {
+      createAccumulator: jest.fn().mockReturnValue({
+        channels: new Map(),
+        attachments: [],
+        metadata: {},
+        traceEvents: [],
+        traceStartedAt: Date.now(),
+        traceCompletedAt: null,
+      }),
+      processEvent: jest.fn(),
+      getResult: jest.fn().mockReturnValue({
+        content: { text: "", contentChains: [], attachments: [], metadata: {} },
+        trace: null,
+      }),
+    } as unknown as jest.Mocked<EventProcessor>;
+
+    engine = new LangGraphEngine(mockEventProcessor, undefined);
+  });
+
+  afterEach(() => {
+    clearAttachmentDataStore();
+  });
+
+  it("should extract threadId from config.configurable.thread_id", async () => {
+    storeAttachmentData("tool_1", "data", "tid-from-config");
+
+    const mockGraph = {
+      invoke: jest
+        .fn()
+        .mockResolvedValue({ text: "", attachments: [], metadata: {} }),
+    };
+
+    await engine.invokeGraph(mockGraph, {
+      input: {},
+      config: { configurable: { thread_id: "tid-from-config" } },
+    });
+
+    // Data should have been cleaned up
+    expect(getAttachmentData("tool_1", "tid-from-config")).toBeUndefined();
+  });
+
+  it("should extract threadId from config.configurable.context.threadId", async () => {
+    storeAttachmentData("tool_1", "data", "tid-from-context");
+
+    const mockGraph = {
+      invoke: jest
+        .fn()
+        .mockResolvedValue({ text: "", attachments: [], metadata: {} }),
+    };
+
+    await engine.invokeGraph(mockGraph, {
+      input: {},
+      config: { configurable: { context: { threadId: "tid-from-context" } } },
+    });
+
+    expect(getAttachmentData("tool_1", "tid-from-context")).toBeUndefined();
+  });
+
+  it("should extract threadId from top-level configurable.thread_id", async () => {
+    storeAttachmentData("tool_1", "data", "tid-top-level");
+
+    const mockGraph = {
+      invoke: jest
+        .fn()
+        .mockResolvedValue({ text: "", attachments: [], metadata: {} }),
+    };
+
+    await engine.invokeGraph(mockGraph, {
+      input: {},
+      configurable: { thread_id: "tid-top-level" },
+    });
+
+    expect(getAttachmentData("tool_1", "tid-top-level")).toBeUndefined();
+  });
+
+  it("should not clean up when no threadId is present", async () => {
+    storeAttachmentData("tool_1", "data", "some-thread");
+
+    const mockGraph = {
+      invoke: jest
+        .fn()
+        .mockResolvedValue({ text: "", attachments: [], metadata: {} }),
+    };
+
+    await engine.invokeGraph(mockGraph, {
+      input: {},
+      config: {},
+    });
+
+    // Data should still be there — no threadId to clean up
+    expect(getAttachmentData("tool_1", "some-thread")).toBe("data");
   });
 });

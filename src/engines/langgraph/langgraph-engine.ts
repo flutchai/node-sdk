@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { IGraphEngine } from "../../core";
 import { EventProcessor } from "./event-processor.utils";
 import { ConfigService } from "@nestjs/config";
+import { clearAttachmentDataStore } from "../../graph/attachment-tool-node";
 
 /**
  * Graph engine implemented using LangGraph.js
@@ -89,13 +90,24 @@ export class LangGraphEngine implements IGraphEngine {
     // Deserialize input if needed
     const input = await this.deserializeInput(preparedPayload.input || {});
 
-    const result = await graph.invoke(input, {
-      ...preparedPayload.config,
-      signal: preparedPayload.signal,
-    });
+    try {
+      const result = await graph.invoke(input, {
+        ...preparedPayload.config,
+        signal: preparedPayload.signal,
+      });
 
-    // Transform the result
-    return this.processGraphResult(result);
+      // Transform the result
+      return this.processGraphResult(result);
+    } finally {
+      // Clean up in-memory attachment data for this thread
+      const threadId = this.extractThreadId(preparedPayload);
+      if (threadId) {
+        clearAttachmentDataStore(threadId);
+        this.logger.debug(
+          `[ENGINE] Cleared attachment data store for thread: ${threadId}`
+        );
+      }
+    }
   }
 
   async streamGraph(
@@ -150,6 +162,15 @@ export class LangGraphEngine implements IGraphEngine {
       // ALWAYS try to send trace events, even if graph failed
       // This ensures we capture metrics for billing even on errors
       await this.sendTraceFromAccumulator(acc, preparedPayload, streamError);
+
+      // Clean up in-memory attachment data for this thread
+      const threadId = this.extractThreadId(preparedPayload);
+      if (threadId) {
+        clearAttachmentDataStore(threadId);
+        this.logger.debug(
+          `[ENGINE] Cleared attachment data store for thread: ${threadId}`
+        );
+      }
     }
 
     // Get final result from accumulator
@@ -395,6 +416,19 @@ export class LangGraphEngine implements IGraphEngine {
       });
       // Don't throw - batch webhook failure shouldn't break graph execution
     }
+  }
+
+  /**
+   * Extract threadId from payload (used for attachment store cleanup)
+   */
+  private extractThreadId(preparedPayload: any): string | undefined {
+    return (
+      preparedPayload.configurable?.thread_id ||
+      preparedPayload.configurable?.context?.threadId ||
+      preparedPayload.config?.configurable?.thread_id ||
+      preparedPayload.config?.configurable?.context?.threadId ||
+      undefined
+    );
   }
 
   /**

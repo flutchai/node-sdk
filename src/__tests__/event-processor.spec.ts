@@ -569,7 +569,10 @@ describe("EventProcessor", () => {
   describe("processEvent - on_chain_end", () => {
     it("should extract attachments from answer format", () => {
       const acc = createAccumulator();
-      const attachment = { type: "file", url: "https://example.com/file.pdf" };
+      const attachment = {
+        type: "file",
+        value: "https://example.com/file.pdf",
+      };
 
       processor.processEvent(acc, {
         event: "on_chain_end",
@@ -600,7 +603,7 @@ describe("EventProcessor", () => {
         data: {
           output: {
             generation: {
-              attachments: [{ type: "image", url: "img.png" }],
+              attachments: [{ type: "image", value: "img.png" }],
               metadata: { model: "gpt-4" },
             },
           },
@@ -622,7 +625,7 @@ describe("EventProcessor", () => {
         event: "on_chain_end",
         data: {
           output: {
-            attachments: [{ type: "doc" }],
+            attachments: [{ type: "doc", value: { content: "document" } }],
             metadata: { key: "value" },
           },
         },
@@ -642,7 +645,12 @@ describe("EventProcessor", () => {
       processor.processEvent(acc, {
         event: "on_chain_end",
         data: {
-          output: { answer: { attachments: [{ id: 1 }], metadata: {} } },
+          output: {
+            answer: {
+              attachments: [{ type: "file", value: "a.pdf" }],
+              metadata: {},
+            },
+          },
         },
         metadata: {
           stream_channel: StreamChannel.TEXT,
@@ -653,7 +661,12 @@ describe("EventProcessor", () => {
       processor.processEvent(acc, {
         event: "on_chain_end",
         data: {
-          output: { answer: { attachments: [{ id: 2 }], metadata: {} } },
+          output: {
+            answer: {
+              attachments: [{ type: "file", value: "b.pdf" }],
+              metadata: {},
+            },
+          },
         },
         metadata: {
           stream_channel: StreamChannel.TEXT,

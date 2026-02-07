@@ -34,11 +34,18 @@ function generateRow(i: number) {
     tags: JSON.stringify(["tag1", "tag2"]),
     received_at: new Date(Date.now() - i * 60000).toISOString(),
     is_processed: i % 2 === 0,
-    processed_at: i % 2 === 0 ? new Date(Date.now() - i * 30000).toISOString() : null,
-    response: i % 2 === 0 ? `Response for message ${i}. Contains the AI response text.` : null,
+    processed_at:
+      i % 2 === 0 ? new Date(Date.now() - i * 30000).toISOString() : null,
+    response:
+      i % 2 === 0
+        ? `Response for message ${i}. Contains the AI response text.`
+        : null,
     session_id: `session_${i % 100}`,
     error_message: null,
-    raw_claude_response: i % 5 === 0 ? `{"id":"msg_${i}","content":[{"type":"text","text":"response"}]}` : null,
+    raw_claude_response:
+      i % 5 === 0
+        ? `{"id":"msg_${i}","content":[{"type":"text","text":"response"}]}`
+        : null,
     dialog_id: `dialog_${i % 50}`,
     project_slug: ["svetu-auth", "mind", "flutch", "teleclaude"][i % 4],
     bot_name: ["@teleclaude_workplace_bot", "@teleclaude_mind_bot"][i % 2],
@@ -55,7 +62,10 @@ function generateLargeToolContent(rowCount: number): string {
 }
 
 /** Generate a short attachment summary (like createGraphAttachment does) */
-function generateAttachmentSummary(rowCount: number, toolCallId: string): string {
+function generateAttachmentSummary(
+  rowCount: number,
+  toolCallId: string
+): string {
   const sampleRows = Array.from({ length: 5 }, (_, i) => generateRow(i));
   let summary = `${rowCount} rows, 21 columns (id, telegram_id, chat_id, telegram_user_id, username, text, type, tags, received_at, is_processed, processed_at, response, session_id, error_message, raw_claude_response, dialog_id, project_slug, bot_name, user_id, note, claude_message_uuid)\n`;
   summary += `Sample data:\n`;
@@ -98,9 +108,7 @@ function createEvents(opts: {
       event: "on_chat_model_stream",
       data: {
         chunk: {
-          content: [
-            { type: "text", text: "I'll query the messages table." },
-          ],
+          content: [{ type: "text", text: "I'll query the messages table." }],
         },
       },
       metadata: { langgraph_node: "output_generate", stream_channel: "text" },
@@ -241,7 +249,10 @@ describe("Attachment system: EventProcessor → message content size", () => {
 
   describe("Baseline: small tool result (no attachment)", () => {
     it("should produce small content when tool result is under threshold", () => {
-      const smallContent = JSON.stringify({ success: true, result: [{ id: 1, name: "Alice" }] });
+      const smallContent = JSON.stringify({
+        success: true,
+        result: [{ id: 1, name: "Alice" }],
+      });
       const events = createEvents({
         toolOutputContent: smallContent,
         graphAttachments: {},
@@ -315,24 +326,14 @@ describe("Attachment system: EventProcessor → message content size", () => {
       for (const event of events) {
         processor.processEvent(acc, event);
       }
-      const { content, trace } = processor.getResult(acc);
+      const { content } = processor.getResult(acc);
 
       // Serialize content as it would be stored in MongoDB
       const contentJson = JSON.stringify(content);
-      const traceJson = trace ? JSON.stringify(trace) : "null";
 
       // Content must be well under 16MB
       const MONGODB_LIMIT = 16 * 1024 * 1024; // 16MB
       expect(contentJson.length).toBeLessThan(MONGODB_LIMIT);
-
-      // Log sizes for debugging
-      console.log("=== Content sizes ===");
-      console.log(`  content total: ${contentJson.length} bytes`);
-      console.log(`  content.text: ${content.text?.length || 0} chars`);
-      console.log(`  content.attachments: ${JSON.stringify(content.attachments || []).length} bytes`);
-      console.log(`  content.contentChains: ${JSON.stringify(content.contentChains || []).length} bytes`);
-      console.log(`  content.metadata: ${JSON.stringify(content.metadata || {}).length} bytes`);
-      console.log(`  trace: ${traceJson.length} bytes`);
     });
 
     it("should handle on_tool_end with very large raw output (pre-attachment)", () => {
@@ -377,7 +378,10 @@ describe("Attachment system: EventProcessor → message content size", () => {
   describe("Simulated full message document size", () => {
     it("should produce a message DTO under 16MB", () => {
       const ROW_COUNT = 9000;
-      const attachmentSummary = generateAttachmentSummary(ROW_COUNT, TOOL_CALL_ID);
+      const attachmentSummary = generateAttachmentSummary(
+        ROW_COUNT,
+        TOOL_CALL_ID
+      );
       const graphAttachments: Record<string, IGraphAttachment> = {
         [TOOL_CALL_ID]: {
           data: null,
@@ -391,7 +395,8 @@ describe("Attachment system: EventProcessor → message content size", () => {
       const events = createEvents({
         toolOutputContent: attachmentSummary,
         graphAttachments,
-        llmSummaryText: "The messages table contains 8969 records with 21 columns.",
+        llmSummaryText:
+          "The messages table contains 8969 records with 21 columns.",
       });
 
       const acc = processor.createAccumulator();
@@ -451,21 +456,20 @@ describe("Attachment system: EventProcessor → message content size", () => {
       const serialized = JSON.stringify(messageDto);
       const MONGODB_LIMIT = 16 * 1024 * 1024;
 
-      console.log("=== Simulated message DTO sizes ===");
-      console.log(`  TOTAL: ${serialized.length} bytes (${(serialized.length / 1024 / 1024).toFixed(2)} MB)`);
-      console.log(`  content.text: ${content.text?.length || 0} chars`);
-      console.log(`  content.contentChains: ${JSON.stringify(content.contentChains || []).length} bytes`);
-      console.log(`  content.attachments: ${JSON.stringify(content.attachments || []).length} bytes`);
-      console.log(`  content.metadata: ${JSON.stringify(content.metadata || {}).length} bytes`);
-      console.log(`  message.metadata: ${JSON.stringify(messageDto.metadata).length} bytes`);
-      console.log(`  MongoDB limit: ${MONGODB_LIMIT} bytes (${(MONGODB_LIMIT / 1024 / 1024).toFixed(0)} MB)`);
-
       // Each individual field check
-      expect(JSON.stringify(content.contentChains || []).length).toBeLessThan(1_000_000); // <1MB
-      expect(JSON.stringify(content.attachments || []).length).toBeLessThan(100_000); // <100KB
-      expect(JSON.stringify(content.metadata || {}).length).toBeLessThan(100_000); // <100KB
-      expect((content.text?.length || 0)).toBeLessThan(1_000_000); // <1MB
-      expect(JSON.stringify(messageDto.metadata).length).toBeLessThan(1_000_000); // <1MB
+      expect(JSON.stringify(content.contentChains || []).length).toBeLessThan(
+        1_000_000
+      ); // <1MB
+      expect(JSON.stringify(content.attachments || []).length).toBeLessThan(
+        100_000
+      ); // <100KB
+      expect(JSON.stringify(content.metadata || {}).length).toBeLessThan(
+        100_000
+      ); // <100KB
+      expect(content.text?.length || 0).toBeLessThan(1_000_000); // <1MB
+      expect(JSON.stringify(messageDto.metadata).length).toBeLessThan(
+        1_000_000
+      ); // <1MB
 
       // Total must fit MongoDB
       expect(serialized.length).toBeLessThan(MONGODB_LIMIT);
@@ -498,7 +502,7 @@ describe("Attachment system: EventProcessor → message content size", () => {
 
         // Total trace should be manageable
         const traceJson = JSON.stringify(trace);
-        console.log(`  trace total: ${traceJson.length} bytes (${(traceJson.length / 1024).toFixed(0)} KB)`);
+        expect(traceJson.length).toBeLessThan(500_000);
       }
     });
   });

@@ -41,26 +41,80 @@ export const DEFAULT_ATTACHMENT_THRESHOLD =
   Number(process.env.ATTACHMENT_THRESHOLD) || 4000;
 
 /**
- * In-memory store for large attachment data.
+ * In-memory store for large attachment data, scoped by threadId.
  * Keeps data out of graph state to avoid MongoDB 16MB checkpoint limit.
  * Graph state only stores metadata (summary, toolName, etc.).
  * Data is retrieved from here during auto-injection.
+ *
+ * Each thread (graph execution) gets its own isolated Map to prevent
+ * data leaks between concurrent requests. Cleanup removes only that
+ * thread's data when execution completes.
  */
-const attachmentDataStore = new Map<string, any>();
+const attachmentDataStore = new Map<string, Map<string, any>>();
 
-/** Store data for a given attachment key */
-export function storeAttachmentData(key: string, data: any): void {
-  attachmentDataStore.set(key, data);
+/** Auto-cleanup timers per thread (safety net if clearAttachmentDataStore is not called) */
+const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Max time to keep thread data before auto-cleanup (10 minutes) */
+const AUTO_CLEANUP_MS = 10 * 60 * 1000;
+
+/** Store data for a given attachment key, scoped to threadId */
+export function storeAttachmentData(
+  key: string,
+  data: any,
+  threadId?: string
+): void {
+  const scope = threadId || "__global__";
+  let threadStore = attachmentDataStore.get(scope);
+  if (!threadStore) {
+    threadStore = new Map();
+    attachmentDataStore.set(scope, threadStore);
+  }
+  threadStore.set(key, data);
+
+  // Reset the safety-net auto-cleanup timer on every store call.
+  // This ensures the 10-minute window starts from the last write,
+  // and avoids stale timers cleaning up data prematurely.
+  const existingTimer = cleanupTimers.get(scope);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+  const timer = setTimeout(() => {
+    attachmentDataStore.delete(scope);
+    cleanupTimers.delete(scope);
+  }, AUTO_CLEANUP_MS);
+  if (timer.unref) timer.unref();
+  cleanupTimers.set(scope, timer);
 }
 
-/** Retrieve data for a given attachment key */
-export function getAttachmentData(key: string): any | undefined {
-  return attachmentDataStore.get(key);
+/** Retrieve data for a given attachment key, scoped to threadId */
+export function getAttachmentData(
+  key: string,
+  threadId?: string
+): any | undefined {
+  const scope = threadId || "__global__";
+  return attachmentDataStore.get(scope)?.get(key);
 }
 
-/** Clear stored data (call after graph execution completes) */
-export function clearAttachmentDataStore(): void {
-  attachmentDataStore.clear();
+/**
+ * Clear stored data for a specific thread (call after graph execution completes).
+ * If no threadId is provided, clears all data (backward compatibility).
+ */
+export function clearAttachmentDataStore(threadId?: string): void {
+  if (threadId) {
+    attachmentDataStore.delete(threadId);
+    const timer = cleanupTimers.get(threadId);
+    if (timer) {
+      clearTimeout(timer);
+      cleanupTimers.delete(threadId);
+    }
+  } else {
+    attachmentDataStore.clear();
+    for (const timer of cleanupTimers.values()) {
+      clearTimeout(timer);
+    }
+    cleanupTimers.clear();
+  }
 }
 
 export interface ExecuteToolWithAttachmentsParams {
@@ -97,6 +151,12 @@ export interface ExecuteToolWithAttachmentsParams {
    * a specific previous tool call.
    */
   sourceAttachmentId?: string;
+  /**
+   * Thread ID for scoping in-memory attachment data store.
+   * Isolates data between concurrent graph executions.
+   * Extract from config.configurable.thread_id or config.configurable.context.threadId.
+   */
+  threadId?: string;
 }
 
 export interface ExecuteToolWithAttachmentsResult {
@@ -127,6 +187,7 @@ export async function executeToolWithAttachments(
     threshold = DEFAULT_ATTACHMENT_THRESHOLD,
     injectIntoArg = "data",
     sourceAttachmentId,
+    threadId,
   } = params;
 
   // Step 1: Auto-injection
@@ -143,10 +204,10 @@ export async function executeToolWithAttachments(
         // Try in-memory store first (data is kept out of graph state)
         // Fall back to attachment.data for backward compatibility
         const attachmentKey = sourceAttachmentId || attachment.toolCallId;
-        const storedData = getAttachmentData(attachmentKey);
+        const storedData = getAttachmentData(attachmentKey, threadId);
         const data = storedData !== undefined ? storedData : attachment.data;
 
-        if (data !== undefined) {
+        if (data != null) {
           argsWithInjection[injectIntoArg] =
             typeof data === "string" ? data : JSON.stringify(data);
           logger?.debug(
@@ -180,7 +241,7 @@ export async function executeToolWithAttachments(
 
       // Store full data in memory (not in graph state) to avoid
       // MongoDB 16MB checkpoint limit. Graph state only gets metadata.
-      storeAttachmentData(toolCall.id, attachment.data);
+      storeAttachmentData(toolCall.id, attachment.data, threadId);
 
       // Create a lightweight version for graph state (without data)
       const stateAttachment: IGraphAttachment = {

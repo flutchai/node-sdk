@@ -145,7 +145,7 @@ export class EventProcessor {
     // are internal and should not be saved as message attachments.
     return items.filter(
       (item): item is IAttachment =>
-        item != null && "type" in item && "value" in item,
+        item != null && "type" in item && "value" in item
     );
   }
 
@@ -402,12 +402,18 @@ export class EventProcessor {
               : "[Output too large to display]";
         }
 
-        // Truncate to avoid oversized message documents in MongoDB (16MB limit)
+        // Truncate to avoid oversized message documents in MongoDB (16MB limit).
+        // Cut at a safe boundary (last newline) to avoid breaking JSON mid-token.
         const MAX_TOOL_OUTPUT_LENGTH = 50_000;
         if (outputString.length > MAX_TOOL_OUTPUT_LENGTH) {
+          let cutAt = outputString.lastIndexOf("\n", MAX_TOOL_OUTPUT_LENGTH);
+          if (cutAt < MAX_TOOL_OUTPUT_LENGTH * 0.8) {
+            // No good newline found nearby, fall back to limit
+            cutAt = MAX_TOOL_OUTPUT_LENGTH;
+          }
           outputString =
-            outputString.slice(0, MAX_TOOL_OUTPUT_LENGTH) +
-            `\n... [truncated: ${outputString.length - MAX_TOOL_OUTPUT_LENGTH} chars]`;
+            outputString.slice(0, cutAt) +
+            `\n... [truncated: ${outputString.length - cutAt} chars]`;
         }
 
         toolBlock.output = outputString;
