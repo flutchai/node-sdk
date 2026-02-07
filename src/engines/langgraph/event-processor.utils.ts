@@ -126,6 +126,30 @@ export class EventProcessor {
   }
 
   /**
+   * Extract attachments from various input formats
+   * Handles both array format (IAttachment[]) and object format (Record<string, IGraphAttachment>)
+   */
+  private extractAttachments(attachments: any): IAttachment[] {
+    if (!attachments) {
+      return [];
+    }
+
+    const items: any[] = Array.isArray(attachments)
+      ? attachments
+      : typeof attachments === "object"
+        ? Object.values(attachments)
+        : [];
+
+    // Only include valid IAttachment objects (must have type and value).
+    // IGraphAttachment objects from graph state (data, summary, toolName, etc.)
+    // are internal and should not be saved as message attachments.
+    return items.filter(
+      (item): item is IAttachment =>
+        item != null && "type" in item && "value" in item,
+    );
+  }
+
+  /**
    * Send delta to UI (unified format)
    */
   private sendDelta(
@@ -364,8 +388,27 @@ export class EventProcessor {
 
       if (toolBlock && toolBlock.type === "tool_use") {
         const output = event.data?.output;
-        const outputString =
-          typeof output === "string" ? output : JSON.stringify(output, null, 2);
+        let outputString: string;
+        try {
+          outputString =
+            typeof output === "string"
+              ? output
+              : JSON.stringify(output, null, 2);
+        } catch {
+          // Handle very large outputs that can't be stringified (e.g. 509MB tool results)
+          outputString =
+            typeof output?.content === "string"
+              ? output.content
+              : "[Output too large to display]";
+        }
+
+        // Truncate to avoid oversized message documents in MongoDB (16MB limit)
+        const MAX_TOOL_OUTPUT_LENGTH = 50_000;
+        if (outputString.length > MAX_TOOL_OUTPUT_LENGTH) {
+          outputString =
+            outputString.slice(0, MAX_TOOL_OUTPUT_LENGTH) +
+            `\n... [truncated: ${outputString.length - MAX_TOOL_OUTPUT_LENGTH} chars]`;
+        }
 
         toolBlock.output = outputString;
 
@@ -430,7 +473,7 @@ export class EventProcessor {
         if (output?.answer) {
           acc.attachments = [
             ...acc.attachments,
-            ...(output.answer.attachments || []),
+            ...this.extractAttachments(output.answer.attachments),
           ];
           acc.metadata = { ...acc.metadata, ...(output.answer.metadata || {}) };
 
@@ -445,14 +488,17 @@ export class EventProcessor {
         } else if (output?.generation) {
           acc.attachments = [
             ...acc.attachments,
-            ...(output.generation.attachments || []),
+            ...this.extractAttachments(output.generation.attachments),
           ];
           acc.metadata = {
             ...acc.metadata,
             ...(output.generation.metadata || {}),
           };
         } else if (output?.attachments || output?.metadata) {
-          acc.attachments = [...acc.attachments, ...(output.attachments || [])];
+          acc.attachments = [
+            ...acc.attachments,
+            ...this.extractAttachments(output.attachments),
+          ];
           acc.metadata = { ...acc.metadata, ...(output.metadata || {}) };
         }
       }

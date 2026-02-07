@@ -40,6 +40,29 @@ import { createGraphAttachment } from "../tools/attachment-summary";
 export const DEFAULT_ATTACHMENT_THRESHOLD =
   Number(process.env.ATTACHMENT_THRESHOLD) || 4000;
 
+/**
+ * In-memory store for large attachment data.
+ * Keeps data out of graph state to avoid MongoDB 16MB checkpoint limit.
+ * Graph state only stores metadata (summary, toolName, etc.).
+ * Data is retrieved from here during auto-injection.
+ */
+const attachmentDataStore = new Map<string, any>();
+
+/** Store data for a given attachment key */
+export function storeAttachmentData(key: string, data: any): void {
+  attachmentDataStore.set(key, data);
+}
+
+/** Retrieve data for a given attachment key */
+export function getAttachmentData(key: string): any | undefined {
+  return attachmentDataStore.get(key);
+}
+
+/** Clear stored data (call after graph execution completes) */
+export function clearAttachmentDataStore(): void {
+  attachmentDataStore.clear();
+}
+
 export interface ExecuteToolWithAttachmentsParams {
   toolCall: {
     id: string;
@@ -117,13 +140,19 @@ export async function executeToolWithAttachments(
         : getLatestAttachment(attachments);
 
       if (attachment) {
-        argsWithInjection[injectIntoArg] =
-          typeof attachment.data === "string"
-            ? attachment.data
-            : JSON.stringify(attachment.data);
-        logger?.debug(
-          `[Attachment] Auto-injected data from attachment "${attachment.toolCallId}" into ${toolCall.name}.${injectIntoArg}`
-        );
+        // Try in-memory store first (data is kept out of graph state)
+        // Fall back to attachment.data for backward compatibility
+        const attachmentKey = sourceAttachmentId || attachment.toolCallId;
+        const storedData = getAttachmentData(attachmentKey);
+        const data = storedData !== undefined ? storedData : attachment.data;
+
+        if (data !== undefined) {
+          argsWithInjection[injectIntoArg] =
+            typeof data === "string" ? data : JSON.stringify(data);
+          logger?.debug(
+            `[Attachment] Auto-injected data from attachment "${attachment.toolCallId}" into ${toolCall.name}.${injectIntoArg} (source: ${storedData !== undefined ? "memory" : "state"})`
+          );
+        }
       }
     }
   } catch (e) {
@@ -149,8 +178,18 @@ export async function executeToolWithAttachments(
         toolCall.id
       );
 
+      // Store full data in memory (not in graph state) to avoid
+      // MongoDB 16MB checkpoint limit. Graph state only gets metadata.
+      storeAttachmentData(toolCall.id, attachment.data);
+
+      // Create a lightweight version for graph state (without data)
+      const stateAttachment: IGraphAttachment = {
+        ...attachment,
+        data: null, // Data stored in memory, not in graph state
+      };
+
       logger?.debug(
-        `[Attachment] Stored large result (${content.length} chars) as attachment "${toolCall.id}"`
+        `[Attachment] Stored large result (${content.length} chars) as attachment "${toolCall.id}" (data in memory, metadata in state)`
       );
 
       const toolMessage = new ToolMessage({
@@ -161,7 +200,7 @@ export async function executeToolWithAttachments(
 
       return {
         toolMessage,
-        attachment: { key: toolCall.id, value: attachment },
+        attachment: { key: toolCall.id, value: stateAttachment },
       };
     }
   } catch (e) {
