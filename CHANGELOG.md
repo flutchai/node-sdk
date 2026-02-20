@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-02-20
+
+### Added
+
+- `dispatchAttachments` helper function for streaming attachments from LangGraph nodes without duplication
+- Support for `send_attachments` custom event in EventProcessor for proper attachment handling
+
+### Changed
+
+- Refactored attachment extraction in EventProcessor - removed `on_chain_end` attachment extraction to prevent duplication
+- Attachments are now dispatched via custom events (`send_attachments`) using `dispatchAttachments` helper
+- Enhanced EventProcessor logging to include attachments count and data in final result
+
+### Fixed
+
+- Fixed attachment duplication issue - attachments are no longer extracted multiple times from different events
+- Improved attachment streaming workflow - now uses dedicated custom event instead of relying on chain end events
+
 ## [0.2.5] - 2026-02-07
 
 ### Fixed

@@ -326,15 +326,28 @@ export class EventProcessor {
   ): void {
     this.captureTraceEvent(acc, event);
 
-    // 0. Custom events - for streaming static messages from nodes
+    // 0. Custom events - for streaming static messages and attachments from nodes
     if (event.event === "on_custom_event" && event.data) {
       const channel =
         (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
 
+      // Handle static message streaming
       if (event.name === "send_static_message" && event.data.content) {
         const blocks = this.normalizeContentBlocks(event.data.content);
         this.processContentStream(acc, channel, blocks, onPartial);
       }
+
+      // Handle attachments streaming
+      if (event.name === "send_attachments" && event.data.attachments) {
+        const attachments = event.data.attachments || [];
+        acc.attachments = [...acc.attachments, ...attachments];
+
+        this.logger.debug("[ATTACHMENTS] Extracted from send_attachments event", {
+          extractedCount: attachments.length,
+          totalAccCount: acc.attachments.length,
+        });
+      }
+
       return;
     }
 
@@ -465,52 +478,6 @@ export class EventProcessor {
       });
       return;
     }
-
-    // 3. Chain end: extract final attachments and metadata (TEXT channel only)
-    if (event.event === "on_chain_end") {
-      const channel =
-        (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
-
-      if (channel === StreamChannel.TEXT) {
-        const output = event.data.output;
-
-        // Extract attachments and metadata from different graph output formats
-        // Use merge instead of replace to preserve data from multiple nodes
-        if (output?.answer) {
-          acc.attachments = [
-            ...acc.attachments,
-            ...this.extractAttachments(output.answer.attachments),
-          ];
-          acc.metadata = { ...acc.metadata, ...(output.answer.metadata || {}) };
-
-          // TODO: Implement proper streaming for static messages from nodes
-          // Currently commented out due to duplication issues (same content extracted 4x from different events)
-          // Need to implement custom event emission in nodes for proper streaming
-          //
-          // Extract content from answer if it's a LangChain message
-          // if (output.answer.content) {
-          //   ... code commented out ...
-          // }
-        } else if (output?.generation) {
-          acc.attachments = [
-            ...acc.attachments,
-            ...this.extractAttachments(output.generation.attachments),
-          ];
-          acc.metadata = {
-            ...acc.metadata,
-            ...(output.generation.metadata || {}),
-          };
-        } else if (output?.attachments || output?.metadata) {
-          acc.attachments = [
-            ...acc.attachments,
-            ...this.extractAttachments(output.attachments),
-          ];
-          acc.metadata = { ...acc.metadata, ...(output.metadata || {}) };
-        }
-      }
-
-      return;
-    }
   }
 
   /**
@@ -589,6 +556,8 @@ export class EventProcessor {
         .length,
       totalSteps: allChains.reduce((sum, c) => sum + c.steps.length, 0),
       textLength: text.length,
+      attachmentsCount: acc.attachments?.length || 0,
+      attachments: acc.attachments,
     });
 
     return {
