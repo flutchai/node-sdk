@@ -43,3 +43,34 @@ export async function createStaticMessage(
 
   return message;
 }
+
+/**
+ * Dispatches attachments (buttons, files, etc.) from a LangGraph node.
+ *
+ * This helper dispatches a custom event that the EventProcessor uses to
+ * add attachments to the final response without duplication.
+ *
+ * @param attachments - Array of attachments to send
+ * @param config - LangGraph runnable config (required for dispatchCustomEvent)
+ *
+ * @example
+ * ```typescript
+ * async execute(
+ *   state: MyGraphStateValues,
+ *   config: LangGraphRunnableConfig<MyConfigValues>
+ * ): Promise<Partial<MyGraphStateValues>> {
+ *   await dispatchAttachments([
+ *     { type: 'button', value: { text: 'Click me', url: 'https://...' } }
+ *   ], config);
+ *
+ *   return { answer };
+ * }
+ * ```
+ */
+export async function dispatchAttachments(
+  attachments: any[],
+  config: LangGraphRunnableConfig
+): Promise<void> {
+  // Dispatch custom event for attachments (works with streamEvents v2)
+  await dispatchCustomEvent("send_attachments", { attachments }, config);
+}

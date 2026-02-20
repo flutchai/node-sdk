@@ -7,7 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-02-20
+
+<details>
+<summary>Show changes</summary>
+
+### Added
+
+- `dispatchAttachments` helper function for streaming attachments from LangGraph nodes without duplication
+- Support for `send_attachments` custom event in EventProcessor for proper attachment handling
+
+### Changed
+
+- Refactored attachment extraction in EventProcessor - removed `on_chain_end` attachment extraction to prevent duplication
+- Attachments are now dispatched via custom events (`send_attachments`) using `dispatchAttachments` helper
+- Enhanced EventProcessor logging to include attachments count and data in final result
+
+### Fixed
+
+- Fixed attachment duplication issue - attachments are no longer extracted multiple times from different events
+- Improved attachment streaming workflow - now uses dedicated custom event instead of relying on chain end events
+
+</details>
+
 ## [0.2.5] - 2026-02-07
+
+<details>
+<summary>Show changes</summary>
 
 ### Fixed
 
@@ -32,7 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 12 new tests in `attachment-data-store.spec.ts` covering thread isolation, cleanup, auto-cleanup timer, and null data fallback
 - Integration test `attachment-message-size.spec.ts` simulating full flow: 9000-row PostgreSQL query through EventProcessor, verifying MongoDB 16MB BSON limit compliance
 
+</details>
+
 ## [0.2.4] - 2026-02-03
+
+<details>
+<summary>Show changes</summary>
 
 ### Added
 
@@ -46,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `shouldInjectData` logic: now only injects when argument is truly `undefined`, not when it has any falsy value (fixes overwriting user-provided empty strings, 0, false, null)
+
+</details>
 
 ## [0.2.3] - 2026-02-02
 
