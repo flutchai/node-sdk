@@ -16,10 +16,11 @@ import {
   CompiledStateGraph,
   LangGraphRunnableConfig,
 } from "@langchain/langgraph";
+import type { OverwriteValue } from "@langchain/langgraph";
 
 // MappedChannels and other base types
 export type MappedChannels<T> = {
-  [K in keyof T]: BaseChannel<T[K], T[K]>;
+  [K in keyof T]: BaseChannel<T[K], T[K] | OverwriteValue<T[K]>, unknown>;
 };
 
 // Global registry of graph types - extended via declare global in each graph
