@@ -567,131 +567,70 @@ describe("EventProcessor", () => {
   });
 
   describe("processEvent - on_chain_end", () => {
-    it("should extract attachments from answer format", () => {
+    it("should extract metadata from node output", () => {
       const acc = createAccumulator();
-      const attachment = {
-        type: "file",
-        value: "https://example.com/file.pdf",
-      };
 
       processor.processEvent(acc, {
         event: "on_chain_end",
         data: {
           output: {
-            answer: {
-              attachments: [attachment],
-              metadata: { source: "test" },
-            },
+            metadata: { source: "test", campaignId: "camp-123" },
           },
         },
         metadata: {
-          stream_channel: StreamChannel.TEXT,
-          langgraph_node: "agent",
+          langgraph_node: "execute_flow",
         },
       });
 
-      expect(acc.attachments).toHaveLength(1);
-      expect(acc.attachments[0]).toEqual(attachment);
-      expect(acc.metadata).toEqual({ source: "test" });
+      expect(acc.metadata).toEqual({ source: "test", campaignId: "camp-123" });
     });
 
-    it("should extract attachments from generation format", () => {
+    it("should merge metadata from multiple on_chain_end events", () => {
       const acc = createAccumulator();
 
       processor.processEvent(acc, {
         event: "on_chain_end",
         data: {
           output: {
-            generation: {
-              attachments: [{ type: "image", value: "img.png" }],
-              metadata: { model: "gpt-4" },
-            },
+            metadata: { campaignId: "camp-123", nodeId: "node-1" },
           },
         },
         metadata: {
-          stream_channel: StreamChannel.TEXT,
-          langgraph_node: "agent",
+          langgraph_node: "execute_flow",
         },
       });
 
-      expect(acc.attachments).toHaveLength(1);
-      expect(acc.metadata.model).toBe("gpt-4");
+      processor.processEvent(acc, {
+        event: "on_chain_end",
+        data: {
+          output: {
+            metadata: { nodeId: "node-2", platform: "telegram" },
+          },
+        },
+        metadata: {
+          langgraph_node: "save_results",
+        },
+      });
+
+      expect(acc.metadata).toEqual({
+        campaignId: "camp-123",
+        nodeId: "node-2", // Should be overwritten
+        platform: "telegram",
+      });
     });
 
-    it("should extract attachments from flat output format", () => {
+    it("should ignore on_chain_end without langgraph_node", () => {
       const acc = createAccumulator();
 
       processor.processEvent(acc, {
         event: "on_chain_end",
         data: {
-          output: {
-            attachments: [{ type: "doc", value: { content: "document" } }],
-            metadata: { key: "value" },
-          },
+          output: { metadata: { should: "ignore" } },
         },
-        metadata: {
-          stream_channel: StreamChannel.TEXT,
-          langgraph_node: "agent",
-        },
+        metadata: {},
       });
 
-      expect(acc.attachments).toHaveLength(1);
-      expect(acc.metadata.key).toBe("value");
-    });
-
-    it("should merge attachments from multiple on_chain_end events", () => {
-      const acc = createAccumulator();
-
-      processor.processEvent(acc, {
-        event: "on_chain_end",
-        data: {
-          output: {
-            answer: {
-              attachments: [{ type: "file", value: "a.pdf" }],
-              metadata: {},
-            },
-          },
-        },
-        metadata: {
-          stream_channel: StreamChannel.TEXT,
-          langgraph_node: "node1",
-        },
-      });
-
-      processor.processEvent(acc, {
-        event: "on_chain_end",
-        data: {
-          output: {
-            answer: {
-              attachments: [{ type: "file", value: "b.pdf" }],
-              metadata: {},
-            },
-          },
-        },
-        metadata: {
-          stream_channel: StreamChannel.TEXT,
-          langgraph_node: "node2",
-        },
-      });
-
-      expect(acc.attachments).toHaveLength(2);
-    });
-
-    it("should ignore on_chain_end from non-TEXT channels", () => {
-      const acc = createAccumulator();
-
-      processor.processEvent(acc, {
-        event: "on_chain_end",
-        data: {
-          output: { answer: { attachments: [{ id: 1 }], metadata: {} } },
-        },
-        metadata: {
-          stream_channel: StreamChannel.PROCESSING,
-          langgraph_node: "agent",
-        },
-      });
-
-      expect(acc.attachments).toHaveLength(0);
+      expect(acc.metadata).toEqual({});
     });
   });
 

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Upgraded LangChain dependencies to latest versions:
+  - `@langchain/anthropic` ^0.3.33 → ^1.3.22
+  - `@langchain/core` ^1.0.2 → ^1.1.30
+  - `@langchain/langgraph` ^1.0.1 → ^1.2.0
+  - `@langchain/openai` ^1.0.0 → ^1.2.12
+  - `@langchain/cohere` ^1.0.0 → ^1.0.4
+  - `@langchain/mistralai` ^1.0.0 → ^1.0.7
+  - `@langchain/langgraph-checkpoint-mongodb` ^1.0.0 → 1.0.0 (pinned)
+- Refactored `on_chain_end` handling in EventProcessor — metadata is now extracted from node return values via `output.metadata` field instead of from attachment wrapper formats (`answer`, `generation`)
+- Removed attachment extraction from `on_chain_end` events — attachments are now exclusively handled via `send_attachments` custom events (introduced in v0.2.6)
+
+### Removed
+
+- Removed legacy attachment extraction paths from `on_chain_end` (`answer.attachments`, `generation.attachments`, flat `output.attachments`)
+
 ## [0.2.6] - 2026-02-20
 
 ### Added
@@ -333,6 +350,24 @@ export class MyBuilder extends ExternalGraphBuilder<"1.0.0"> { ... }
 - Added `text` field to EventProcessor final result for backwards compatibility with clients expecting plain text response
 - Added explicit `@Inject(BuilderRegistryService)` decorator in GraphController for proper NestJS dependency injection
 
+## [0.1.11] - 2025-11-21
+
+### Added
+
+- Dynamic schema support for `ModelByIdConfig` — allows tools to declare schemas dynamically at runtime
+- Dynamic schema support in tool catalog for flexible tool definitions
+
+## [0.1.10] - 2025-11-18
+
+### Changed
+
+- Refactored content stream processing with text buffer approach for simplified event handling
+- Unified content blocks across `TEXT` and `PROCESSING` channels
+
+### Fixed
+
+- Corrected tool input/output streaming semantics for accurate event processing
+
 ### Changed
 
 - EventProcessor now extracts text from "text" channel and concatenates all text steps into a single string
@@ -473,7 +508,8 @@ export class MyBuilder extends ExternalGraphBuilder<"1.0.0"> { ... }
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.2.5...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.2.6...HEAD
+[0.2.6]: https://github.com/flutchai/node-sdk/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/flutchai/node-sdk/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/flutchai/node-sdk/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/flutchai/node-sdk/compare/v0.2.2...v0.2.3
@@ -493,7 +529,9 @@ export class MyBuilder extends ExternalGraphBuilder<"1.0.0"> { ... }
 [0.1.16]: https://github.com/flutchai/node-sdk/compare/v0.1.14...v0.1.16
 [0.1.14]: https://github.com/flutchai/node-sdk/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/flutchai/node-sdk/compare/v0.1.12...v0.1.13
-[0.1.12]: https://github.com/flutchai/node-sdk/compare/v0.1.9...v0.1.12
+[0.1.12]: https://github.com/flutchai/node-sdk/compare/v0.1.11...v0.1.12
+[0.1.11]: https://github.com/flutchai/node-sdk/compare/v0.1.10...v0.1.11
+[0.1.10]: https://github.com/flutchai/node-sdk/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/flutchai/node-sdk/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/flutchai/node-sdk/compare/v0.1.6...v0.1.8
 [0.1.6]: https://github.com/flutchai/node-sdk/compare/v0.1.5...v0.1.6

@@ -342,10 +342,13 @@ export class EventProcessor {
         const attachments = event.data.attachments || [];
         acc.attachments = [...acc.attachments, ...attachments];
 
-        this.logger.debug("[ATTACHMENTS] Extracted from send_attachments event", {
-          extractedCount: attachments.length,
-          totalAccCount: acc.attachments.length,
-        });
+        this.logger.debug(
+          "[ATTACHMENTS] Extracted from send_attachments event",
+          {
+            extractedCount: attachments.length,
+            totalAccCount: acc.attachments.length,
+          }
+        );
       }
 
       return;
@@ -476,6 +479,34 @@ export class EventProcessor {
         nodeName: event.metadata?.langgraph_node || event.name,
         channel: event.metadata?.stream_channel,
       });
+      return;
+    }
+
+    // 3. Chain end: extract metadata from node return value
+    // Only process events from actual graph nodes (not wrapper chains)
+    if (event.event === "on_chain_end" && event.metadata?.langgraph_node) {
+      const output = event.data?.output;
+
+      // DEBUG: Log ALL on_chain_end events with output structure
+      this.logger.debug("[CHAIN_END] Received on_chain_end event", {
+        nodeName: event.metadata.langgraph_node,
+        hasOutput: !!output,
+        outputKeys: output ? Object.keys(output) : [],
+        hasMetadata: !!output?.metadata,
+        metadata: output?.metadata || null,
+        fullOutput: output, // Full output for debugging
+      });
+
+      if (output?.metadata) {
+        acc.metadata = { ...acc.metadata, ...output.metadata };
+
+        this.logger.debug("[CHAIN_END] Extracted metadata from node", {
+          nodeName: event.metadata.langgraph_node,
+          metadata: output.metadata,
+          accumulatedMetadata: acc.metadata,
+        });
+      }
+
       return;
     }
   }
