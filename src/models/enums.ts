@@ -3,10 +3,6 @@
  */
 
 export enum ModelProvider {
-  FLUTCH = "flutch",
-  FLUTCH_MISTRAL = "flutch-mistral",
-  FLUTCH_OPENAI = "flutch-openai",
-  FLUTCH_ANTHROPIC = "flutch-anthropic",
   MISTRAL = "mistral",
   OPENAI = "openai",
   ANTHROPIC = "anthropic",

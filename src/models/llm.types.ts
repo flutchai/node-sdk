@@ -1,8 +1,4 @@
 import { ModelProvider } from "./enums";
-import { ChatAnthropic } from "@langchain/anthropic";
-import { ChatCohere } from "@langchain/cohere";
-import { ChatMistralAI } from "@langchain/mistralai";
-import { ChatOpenAI } from "@langchain/openai";
 import {
   BaseChatModel,
   BaseChatModelCallOptions,
@@ -12,13 +8,6 @@ import { IAgentToolConfig } from "../tools";
 import { Runnable } from "@langchain/core/runnables";
 import { BaseLanguageModelInput } from "@langchain/core/language_models/base";
 import { AIMessageChunk } from "@langchain/core/messages";
-
-export interface ModelConfig {
-  name: string;
-  modelProvider: ModelProvider;
-  temperature?: number;
-  maxTokens?: number;
-}
 
 // Interface for initialization by model ID
 export interface ModelByIdConfig {
@@ -45,18 +34,13 @@ export interface ModelConfigWithToken {
   defaultMaxTokens: number;
   apiToken?: string;
   requiresApiKey: boolean;
+  // Bedrock routing
+  useBedrock?: boolean;
+  bedrockModelId?: string;
 }
+
+// Callback to resolve API keys by provider (replaces scattered process.env lookups)
+export type ApiKeyResolver = (provider: ModelProvider) => string | undefined;
 
 // Use BaseChatModel which has withStructuredOutput method
 export type LLModel = BaseChatModel;
-
-// Keep concrete types for backward compatibility
-export type ConcreteModels =
-  | ChatOpenAI
-  | ChatAnthropic
-  | ChatCohere
-  | ChatMistralAI;
-
-export type ModelCreator = (
-  config: ModelConfig & { customApiToken?: string }
-) => LLModel;
