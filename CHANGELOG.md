@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-03-15
+
+### Changed
+
+- **BREAKING:** Moved NestJS packages (`@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express`, `@nestjs/config`, `@nestjs/axios`, `@nestjs/mongoose`, `@nestjs/swagger`, `@nestjs/terminus`), `ioredis`, `mongoose`, `prom-client`, `reflect-metadata`, and `@willsoto/nestjs-prometheus` from `dependencies` to `peerDependencies` — consumers must now install these packages themselves
+- Added NestJS v11 support in peer dependencies (`^10.0.0 || ^11.0.0` for core, common, platform-express; `^7.0.0 || ^11.0.0` for swagger)
+- Replaced `@langchain/azure-openai` with `@langchain/aws` (`^1.3.1`) for AWS Bedrock support
+- Added `ApiKeyResolver` callback type — allows injecting custom API key resolution instead of relying on `process.env` lookups
+- `ModelInitializer` constructor now accepts optional `ApiKeyResolver` as third parameter
+- Centralized API key resolution via `resolveApiKey()` method with `DEFAULT_ENV_MAP` fallback
+- Simplified OpenAI model creation using `buildOpenAIModelConfig` pure function
+
+### Added
+
+- AWS Bedrock support via `ChatBedrockConverse` — models with `useBedrock: true` and `bedrockModelId` in config are routed to Bedrock
+- `useBedrock` and `bedrockModelId` fields in `ModelConfigWithToken` interface
+
+### Removed
+
+- Removed `FLUTCH`, `FLUTCH_MISTRAL`, `FLUTCH_OPENAI`, `FLUTCH_ANTHROPIC` values from `ModelProvider` enum
+- Removed GPT-5 monkey patch (~345 lines) from `ModelInitializer` — LangChain now natively supports GPT-5 models
+- Removed `ModelConfig`, `ConcreteModels`, and `ModelCreator` types from `llm.types.ts`
+- Removed concrete model imports (`ChatAnthropic`, `ChatCohere`, `ChatMistralAI`, `ChatOpenAI`) from `llm.types.ts`
+
 ## [0.2.8] - 2026-03-05
 
 ### Fixed
@@ -516,7 +540,8 @@ export class MyBuilder extends ExternalGraphBuilder<"1.0.0"> { ... }
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.2.8...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.2.9...HEAD
+[0.2.9]: https://github.com/flutchai/node-sdk/compare/v0.2.8...v0.2.9
 [0.2.8]: https://github.com/flutchai/node-sdk/compare/v0.2.7...v0.2.8
 [0.2.7]: https://github.com/flutchai/node-sdk/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/flutchai/node-sdk/compare/v0.2.5...v0.2.6
