@@ -34,7 +34,11 @@ import {
   EmbeddingModelCreator,
   ChatModelOrRunnable,
 } from "./model.interface";
-import { ModelByIdConfig, ModelConfigFetcher, ApiKeyResolver } from "./llm.types";
+import {
+  ModelByIdConfig,
+  ModelConfigFetcher,
+  ApiKeyResolver,
+} from "./llm.types";
 
 export class ModelInitializer implements IModelInitializer {
   private logger: Logger;
@@ -45,7 +49,9 @@ export class ModelInitializer implements IModelInitializer {
   // Cache for model instances to avoid recreating identical models
   private modelInstanceCache = new Map<string, Model>();
 
-  private static readonly DEFAULT_ENV_MAP: Partial<Record<ModelProvider, string>> = {
+  private static readonly DEFAULT_ENV_MAP: Partial<
+    Record<ModelProvider, string>
+  > = {
     [ModelProvider.OPENAI]: "OPENAI_API_KEY",
     [ModelProvider.ANTHROPIC]: "ANTHROPIC_API_KEY",
     [ModelProvider.MISTRAL]: "MISTRAL_API_KEY",
