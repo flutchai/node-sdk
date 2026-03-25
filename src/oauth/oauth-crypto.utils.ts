@@ -14,11 +14,7 @@ const IV_LENGTH = 16;
  */
 export function encryptTokens(tokens: OAuthTokens, key: string): string {
   const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv(
-    ALGORITHM,
-    Buffer.from(key),
-    iv,
-  );
+  const cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(key), iv);
   const json = JSON.stringify(tokens);
   let encrypted = cipher.update(json, "utf8", "hex");
   encrypted += cipher.final("hex");
@@ -38,11 +34,7 @@ export function decryptTokens(encrypted: string, key: string): OAuthTokens {
   const encryptedData = encrypted.substring(separatorIndex + 1);
 
   const iv = Buffer.from(ivHex, "hex");
-  const decipher = crypto.createDecipheriv(
-    ALGORITHM,
-    Buffer.from(key),
-    iv,
-  );
+  const decipher = crypto.createDecipheriv(ALGORITHM, Buffer.from(key), iv);
   let decrypted = decipher.update(encryptedData, "hex", "utf8");
   decrypted += decipher.final("utf8");
   return JSON.parse(decrypted);

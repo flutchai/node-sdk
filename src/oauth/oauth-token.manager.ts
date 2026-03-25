@@ -53,7 +53,7 @@ export class OAuthTokenManager {
   constructor(options: OAuthTokenManagerOptions) {
     if (!options.encryptionKey || options.encryptionKey.length < 32) {
       throw new Error(
-        "OAUTH_ENCRYPTION_KEY must be at least 32 characters for AES-256-CBC",
+        "OAUTH_ENCRYPTION_KEY must be at least 32 characters for AES-256-CBC"
       );
     }
     this.store = options.store;
@@ -76,7 +76,7 @@ export class OAuthTokenManager {
     if (!encrypted) {
       throw new Error(
         `No OAuth tokens found for "${config.provider}". ` +
-          `Complete the OAuth consent flow first and call saveTokens().`,
+          `Complete the OAuth consent flow first and call saveTokens().`
       );
     }
 
@@ -89,7 +89,10 @@ export class OAuthTokenManager {
     }
 
     // 4. Expired — refresh
-    const refreshed = await this.refreshAccessToken(config, tokens.refreshToken);
+    const refreshed = await this.refreshAccessToken(
+      config,
+      tokens.refreshToken
+    );
 
     // 5. Persist new tokens
     await this.persistTokens(config.provider, refreshed);
@@ -123,7 +126,7 @@ export class OAuthTokenManager {
 
   private async refreshAccessToken(
     config: OAuthProviderConfig,
-    refreshToken: string,
+    refreshToken: string
   ): Promise<OAuthTokens> {
     try {
       const response = await axios.post(
@@ -137,7 +140,7 @@ export class OAuthTokenManager {
         {
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           timeout: 10_000,
-        },
+        }
       );
 
       const data = response.data;
@@ -152,25 +155,21 @@ export class OAuthTokenManager {
       const body = error?.response?.data;
       throw new Error(
         `OAuth refresh failed for "${config.provider}": ` +
-          `${status || "network error"} ${JSON.stringify(body) || error.message}`,
+          `${status || "network error"} ${JSON.stringify(body) || error.message}`
       );
     }
   }
 
   private async persistTokens(
     provider: string,
-    tokens: OAuthTokens,
+    tokens: OAuthTokens
   ): Promise<void> {
     const encrypted = encryptTokens(tokens, this.encryptionKey);
     await this.store.save(provider, encrypted);
     this.setCache(provider, tokens.accessToken, tokens.expiresAt);
   }
 
-  private setCache(
-    provider: string,
-    token: string,
-    expiresAt: number,
-  ): void {
+  private setCache(provider: string, token: string, expiresAt: number): void {
     this.cache.set(provider, { token, expiresAt });
   }
 }

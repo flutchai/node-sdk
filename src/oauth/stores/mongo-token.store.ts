@@ -14,7 +14,7 @@ export class MongoTokenStore implements IOAuthTokenStore {
 
   constructor(
     private readonly db: Db,
-    collectionName?: string,
+    collectionName?: string
   ) {
     this.collectionName = collectionName ?? DEFAULT_COLLECTION;
   }
@@ -29,11 +29,13 @@ export class MongoTokenStore implements IOAuthTokenStore {
 
   async save(provider: string, encrypted: string): Promise<void> {
     await this.ensureIndex();
-    await this.db.collection(this.collectionName).updateOne(
-      { provider },
-      { $set: { provider, encrypted, updatedAt: new Date() } },
-      { upsert: true },
-    );
+    await this.db
+      .collection(this.collectionName)
+      .updateOne(
+        { provider },
+        { $set: { provider, encrypted, updatedAt: new Date() } },
+        { upsert: true }
+      );
   }
 
   async delete(provider: string): Promise<void> {
