@@ -34,7 +34,7 @@ describe("OAuthProviderRegistry", () => {
 
     it("should throw for unknown provider", () => {
       expect(() => getOAuthProvider("unknown")).toThrow(
-        'Unknown OAuth provider: unknown'
+        "Unknown OAuth provider: unknown"
       );
     });
 

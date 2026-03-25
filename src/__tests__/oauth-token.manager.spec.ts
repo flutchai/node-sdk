@@ -32,11 +32,11 @@ const makeTokens = (overrides?: Partial<OAuthTokens>): OAuthTokens => ({
 function createMockStore(): jest.Mocked<IOAuthTokenStore> {
   const data = new Map<string, string>();
   return {
-    get: jest.fn(async (provider) => data.get(provider) ?? null),
+    get: jest.fn(async provider => data.get(provider) ?? null),
     save: jest.fn(async (provider, encrypted) => {
       data.set(provider, encrypted);
     }),
-    delete: jest.fn(async (provider) => {
+    delete: jest.fn(async provider => {
       data.delete(provider);
     }),
   };
@@ -169,9 +169,7 @@ describe("OAuthTokenManager", () => {
     it("should keep old refresh token when provider does not rotate", async () => {
       const store = createMockStore();
       const expiredTokens = makeTokens({ expiresAt: Date.now() - 1000 });
-      store.get.mockResolvedValue(
-        encryptTokens(expiredTokens, ENCRYPTION_KEY)
-      );
+      store.get.mockResolvedValue(encryptTokens(expiredTokens, ENCRYPTION_KEY));
 
       const manager = new OAuthTokenManager({
         store,
@@ -196,9 +194,7 @@ describe("OAuthTokenManager", () => {
     it("should throw descriptive error on refresh failure", async () => {
       const store = createMockStore();
       const expiredTokens = makeTokens({ expiresAt: Date.now() - 1000 });
-      store.get.mockResolvedValue(
-        encryptTokens(expiredTokens, ENCRYPTION_KEY)
-      );
+      store.get.mockResolvedValue(encryptTokens(expiredTokens, ENCRYPTION_KEY));
 
       const manager = new OAuthTokenManager({
         store,

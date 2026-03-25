@@ -55,10 +55,9 @@ describe("FileTokenStore", () => {
 
       await store.save("jobber", "encrypted_data");
 
-      expect(mockedFs.mkdirSync).toHaveBeenCalledWith(
-        path.dirname(FILE_PATH),
-        { recursive: true }
-      );
+      expect(mockedFs.mkdirSync).toHaveBeenCalledWith(path.dirname(FILE_PATH), {
+        recursive: true,
+      });
       expect(mockedFs.writeFileSync).toHaveBeenCalledWith(
         FILE_PATH,
         JSON.stringify({ jobber: "encrypted_data" }, null, 2),
