@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.10] - 2026-03-25
+
+### Added
+
+- OAuth token management module (`@flutch/node-sdk/oauth`)
+  - `OAuthTokenManager` — handles token acquisition, refresh, and caching
+  - `OAuthCryptoUtils` — encryption/decryption utilities for secure token storage
+  - `FileTokenStore` — file-based token persistence
+  - `MongoTokenStore` — MongoDB-based token persistence
+
 ## [0.2.9] - 2026-03-15
 
 ### Changed

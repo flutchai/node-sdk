@@ -1,6 +1,6 @@
 {
   "name": "@flutchai/flutch-sdk",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "type": "module",
   "description": "Base infrastructure package for building graph microservices - core interfaces, types, utilities, and execution engine",
   "main": "./dist/index.cjs",
@@ -56,6 +56,10 @@
     "./utils": {
       "types": "./dist/utils/index.d.ts",
       "default": "./dist/utils/index.js"
+    },
+    "./oauth": {
+      "types": "./dist/oauth/index.d.ts",
+      "default": "./dist/oauth/index.js"
     }
   },
   "files": [
