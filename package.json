@@ -56,6 +56,10 @@
     "./utils": {
       "types": "./dist/utils/index.d.ts",
       "default": "./dist/utils/index.js"
+    },
+    "./oauth": {
+      "types": "./dist/oauth/index.d.ts",
+      "default": "./dist/oauth/index.js"
     }
   },
   "files": [
