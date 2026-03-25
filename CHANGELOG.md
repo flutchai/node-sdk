@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.11] - 2026-03-25
+
+### Added
+
+- `OAuthProviderRegistry` — static provider registry with env-based config resolution
+  - `loadOAuthProviders()` / `getOAuthProvider()` / `getOAuthProviderNames()`
+  - `resolveOAuthProviderConfig()` — resolves provider config from environment variables
+  - `buildOAuthAuthorizationUrl()` — builds OAuth authorization URL with scopes and state
+
 ## [0.2.10] - 2026-03-25
 
 ### Added
