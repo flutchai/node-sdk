@@ -100,14 +100,14 @@ describe("attachment-tool-node", () => {
       };
 
       // Should NOT inject because 'data' is not in schema
-      expect(
-        shouldInjectData({}, attachments, "data", postgresSchema)
-      ).toBe(false);
+      expect(shouldInjectData({}, attachments, "data", postgresSchema)).toBe(
+        false
+      );
 
       // Should inject into 'query' because it IS in schema
-      expect(
-        shouldInjectData({}, attachments, "query", postgresSchema)
-      ).toBe(true);
+      expect(shouldInjectData({}, attachments, "query", postgresSchema)).toBe(
+        true
+      );
     });
 
     it("should return true when tool schema has the data property", () => {
@@ -129,7 +129,12 @@ describe("attachment-tool-node", () => {
 
       // Should NOT inject because data arg already has value
       expect(
-        shouldInjectData({ data: "existing" }, attachments, "data", pandasSchema)
+        shouldInjectData(
+          { data: "existing" },
+          attachments,
+          "data",
+          pandasSchema
+        )
       ).toBe(false);
     });
 
@@ -141,9 +146,9 @@ describe("attachment-tool-node", () => {
         properties: { query: { type: "string" }, limit: { type: "number" } },
       };
 
-      expect(
-        shouldInjectData({}, attachments, "data", schemaWithoutData)
-      ).toBe(false);
+      expect(shouldInjectData({}, attachments, "data", schemaWithoutData)).toBe(
+        false
+      );
     });
 
     it("should still work when toolSchema is undefined (backward compatibility)", () => {
