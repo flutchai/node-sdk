@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.15] - 2026-03-29
+
+### Changed
+
+- `MISTRAL` provider now routes through the gateway (`FLUTCH_ROUTER_URL`) via `serverURL` — previously called `api.mistral.ai` directly, bypassing the router
+
 ## [0.2.12] - 2026-03-29
 
 ### Added

@@ -522,6 +522,43 @@ Currently supports LangGraph.js. The architecture is designed to support other g
 - **Multi-step Workflows**: Orchestrate complex AI pipelines
 - **Interactive Assistants**: Create agents with callbacks and dynamic UIs
 
+## Publishing
+
+The package is automatically published to [npmjs.org](https://www.npmjs.com/package/@flutchai/flutch-sdk) on every merge to `main` via GitHub Actions.
+
+### How it works
+
+1. On merge to `main`, the [release workflow](.github/workflows/release.yml) runs
+2. It reads the version from `package.json`
+3. If a git tag `v{version}` does not exist yet — it creates the tag and publishes to npm
+4. If the tag already exists — all publish steps are skipped (idempotent)
+
+Publishing uses [npm OIDC Trusted Publishing](https://docs.npmjs.com/generating-provenance-statements) — no npm token secret is required. The GitHub Actions runner authenticates directly with npmjs.org via OpenID Connect.
+
+### Rules
+
+- **Bump the version before merging** — if `package.json` version matches an existing git tag, nothing will be published
+- **Use semantic versioning** — `MAJOR.MINOR.PATCH` (e.g. `0.2.14`)
+  - `PATCH` — bug fixes, minor improvements
+  - `MINOR` — new backward-compatible features
+  - `MAJOR` — breaking changes
+- **One version bump per PR** — keep version changes isolated from feature/fix changes when possible
+
+### Releasing a new version
+
+```bash
+# 1. Create a branch
+git checkout -b chore/bump-version-X.Y.Z
+
+# 2. Update version in package.json
+# "version": "X.Y.Z"
+
+# 3. Push and open a PR
+git push origin chore/bump-version-X.Y.Z
+
+# 4. Merge the PR — publishing happens automatically
+```
+
 ## Links
 
 - [GitHub Repository](https://github.com/flutchai/node-sdk)
