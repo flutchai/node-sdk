@@ -160,8 +160,8 @@ export interface ExecuteToolWithAttachmentsParams {
   /**
    * Tool schema with input properties. Used to validate if the tool
    * actually accepts the injectIntoArg parameter before auto-injection.
-   * If not provided, injection will be skipped to prevent injecting data
-   * into tools that don't support it (e.g., postgres_query).
+   * If not provided, falls back to previous behavior: inject whenever the
+   * data arg is absent (no schema validation).
    */
   toolSchema?: {
     properties?: Record<string, any>;

@@ -472,7 +472,7 @@ describe("attachment-tool-node", () => {
 
         // Verify 'data' was not added
         const callArgs = (mcpClient.executeToolWithEvents as jest.Mock).mock
-          .calls[0][3];
+          .calls[0][2];
         expect(callArgs.data).toBeUndefined();
       });
 

@@ -132,9 +132,7 @@ export class ModelInitializer implements IModelInitializer {
         defaultMaxTokens,
         apiToken || this.resolveApiKey(ModelProvider.OPENAI) || ""
       );
-      if (baseURL) {
-        config.configuration = { baseURL: `${resolveRouterURL(baseURL)}/v1` };
-      }
+      config.configuration = { baseURL: `${resolveRouterURL(baseURL)}/v1` };
       return new ChatOpenAI(config);
     },
 
@@ -151,7 +149,7 @@ export class ModelInitializer implements IModelInitializer {
         maxTokens: defaultMaxTokens,
         anthropicApiKey:
           apiToken || this.resolveApiKey(ModelProvider.ANTHROPIC),
-        ...(baseURL ? { anthropicApiUrl: resolveRouterURL(baseURL) } : {}),
+        anthropicApiUrl: resolveRouterURL(baseURL),
       }) as unknown as BaseChatModel,
 
     [ModelProvider.COHERE]: ({
