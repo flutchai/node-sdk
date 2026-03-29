@@ -35,21 +35,36 @@ export function hashToolsConfig(toolsConfig: IAgentToolConfig[]): string {
   return createHash("md5").update(sorted).digest("hex").slice(0, 16);
 }
 
+export const DEFAULT_ROUTER_URL = "https://router.flutch.ai";
+
+/**
+ * Resolve the router base URL.
+ * Priority: explicit baseURL arg > FLUTCH_ROUTER_URL env > DEFAULT_ROUTER_URL.
+ */
+export function resolveRouterURL(baseURL?: string): string {
+  return baseURL ?? process.env.FLUTCH_ROUTER_URL ?? DEFAULT_ROUTER_URL;
+}
+
 /**
  * Generate a cache key for a model instance.
- * Format: "modelId:temperature:maxTokens[:toolsHash]"
+ * Format: "modelId:temperature:maxTokens[:baseURL][:toolsHash]"
  */
 export function generateModelCacheKey(
   modelId: string,
   temperature?: number,
   maxTokens?: number,
-  toolsConfig?: IAgentToolConfig[]
+  toolsConfig?: IAgentToolConfig[],
+  baseURL?: string
 ): string {
   const parts: (string | number)[] = [
     modelId,
     temperature ?? "default",
     maxTokens ?? "default",
   ];
+
+  if (baseURL) {
+    parts.push(baseURL);
+  }
 
   if (toolsConfig && toolsConfig.length > 0) {
     parts.push(hashToolsConfig(toolsConfig));

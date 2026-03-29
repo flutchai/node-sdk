@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.12] - 2026-03-29
+
+### Added
+
+- `baseURL` field on `ModelByIdConfig` and `ModelConfigWithToken` — allows overriding the LLM provider URL per call or per model config (e.g. route through `https://router.flutch.ai`)
+- `resolveRouterURL` and `DEFAULT_ROUTER_URL` exported from `model.logic.ts`
+- `baseURL` included in model instance cache key to prevent cache collisions when callers use different endpoints
+- `OPENAI` and `ANTHROPIC` providers now support `baseURL` override via config or `FLUTCH_ROUTER_URL` env var
+
+### Changed
+
+- `generateModelCacheKey` now accepts an optional `baseURL` parameter
+
 ## [0.2.11] - 2026-03-25
 
 ### Added

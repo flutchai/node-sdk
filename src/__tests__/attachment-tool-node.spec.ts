@@ -89,6 +89,72 @@ describe("attachment-tool-node", () => {
         true
       );
     });
+
+    it("should return false when tool schema does not have the data property", () => {
+      const attachments = { call_1: createTestAttachment("call_1", [1, 2, 3]) };
+
+      // postgres_query schema has 'query' but not 'data'
+      const postgresSchema = {
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      };
+
+      // Should NOT inject because 'data' is not in schema
+      expect(
+        shouldInjectData({}, attachments, "data", postgresSchema)
+      ).toBe(false);
+
+      // Should inject into 'query' because it IS in schema
+      expect(
+        shouldInjectData({}, attachments, "query", postgresSchema)
+      ).toBe(true);
+    });
+
+    it("should return true when tool schema has the data property", () => {
+      const attachments = { call_1: createTestAttachment("call_1", [1, 2, 3]) };
+
+      // pandas tool schema with 'data' property
+      const pandasSchema = {
+        properties: {
+          data: { type: "string" },
+          operation: { type: "string" },
+        },
+        required: ["data"],
+      };
+
+      // Should inject because 'data' is in schema
+      expect(shouldInjectData({}, attachments, "data", pandasSchema)).toBe(
+        true
+      );
+
+      // Should NOT inject because data arg already has value
+      expect(
+        shouldInjectData({ data: "existing" }, attachments, "data", pandasSchema)
+      ).toBe(false);
+    });
+
+    it("should return false when schema is provided but property is missing", () => {
+      const attachments = { call_1: createTestAttachment("call_1", [1, 2, 3]) };
+
+      // Schema without 'data' property
+      const schemaWithoutData = {
+        properties: { query: { type: "string" }, limit: { type: "number" } },
+      };
+
+      expect(
+        shouldInjectData({}, attachments, "data", schemaWithoutData)
+      ).toBe(false);
+    });
+
+    it("should still work when toolSchema is undefined (backward compatibility)", () => {
+      const attachments = { call_1: createTestAttachment("call_1", [1, 2, 3]) };
+
+      // When schema is not provided, should fall back to old behavior
+      expect(shouldInjectData({}, attachments, "data", undefined)).toBe(true);
+      expect(
+        shouldInjectData({ data: "value" }, attachments, "data", undefined)
+      ).toBe(false);
+    });
   });
 
   describe("_internals.getLatestAttachment", () => {
@@ -356,6 +422,90 @@ describe("attachment-tool-node", () => {
           "test_tool",
           expect.objectContaining({
             data: stringData, // Not JSON.stringify(stringData)
+          }),
+          expect.any(Object),
+          undefined
+        );
+      });
+
+      it("should NOT inject data when tool schema does not have data property", async () => {
+        const attachmentData = [{ id: 1, name: "Alice" }];
+        const attachments = {
+          call_1: createTestAttachment("call_1", attachmentData),
+        };
+
+        const mcpClient = createMockMcpClient({
+          content: '{"success":true}',
+          success: true,
+        });
+
+        // postgres_query schema without 'data' property
+        const postgresSchema = {
+          properties: { query: { type: "string" } },
+          required: ["query"],
+        };
+
+        await executeToolWithAttachments({
+          ...baseParams,
+          mcpClient,
+          attachments,
+          enrichedArgs: { query: "SELECT * FROM users" },
+          toolSchema: postgresSchema,
+        });
+
+        // Should NOT have 'data' injected
+        expect(mcpClient.executeToolWithEvents).toHaveBeenCalledWith(
+          "call_123",
+          "test_tool",
+          expect.objectContaining({
+            query: "SELECT * FROM users",
+            // data should NOT be present
+          }),
+          expect.any(Object),
+          undefined
+        );
+
+        // Verify 'data' was not added
+        const callArgs = (mcpClient.executeToolWithEvents as jest.Mock).mock
+          .calls[0][3];
+        expect(callArgs.data).toBeUndefined();
+      });
+
+      it("should inject data when tool schema has data property", async () => {
+        const attachmentData = [{ id: 1, name: "Alice" }];
+        const attachments = {
+          call_1: createTestAttachment("call_1", attachmentData),
+        };
+
+        const mcpClient = createMockMcpClient({
+          content: '{"success":true}',
+          success: true,
+        });
+
+        // pandas tool schema with 'data' property
+        const pandasSchema = {
+          properties: {
+            data: { type: "string" },
+            operation: { type: "string" },
+          },
+          required: ["data"],
+        };
+
+        await executeToolWithAttachments({
+          ...baseParams,
+          mcpClient,
+          attachments,
+          enrichedArgs: { operation: "analyze" },
+          toolSchema: pandasSchema,
+        });
+
+        // Should have 'data' injected
+        expect(mcpClient.executeToolWithEvents).toHaveBeenCalledWith(
+          "call_123",
+          "test_tool",
+          expect.objectContaining({
+            operation: "analyze",
+            data: JSON.stringify(attachmentData),
           }),
           expect.any(Object),
           undefined
