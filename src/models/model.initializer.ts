@@ -169,12 +169,17 @@ export class ModelInitializer implements IModelInitializer {
       defaultTemperature,
       defaultMaxTokens,
       apiToken,
+      baseURL,
     }) =>
       new ChatMistralAI({
         model: modelName,
         temperature: defaultTemperature,
         maxTokens: defaultMaxTokens,
         apiKey: apiToken || this.resolveApiKey(ModelProvider.MISTRAL),
+        // Route through the same gateway as OpenAI/Anthropic.
+        // Without serverURL, ChatMistralAI ignores FLUTCH_ROUTER_URL and calls
+        // api.mistral.ai directly — inconsistent with other providers.
+        serverURL: `${resolveRouterURL(baseURL)}/v1`,
       }),
 
     [ModelProvider.VOYAGEAI]: () => {
