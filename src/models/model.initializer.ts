@@ -22,6 +22,7 @@ import {
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
 import { CohereRerank } from "@langchain/cohere";
+import { CohereClient } from "cohere-ai";
 import { VoyageAIRerank } from "./rerankers/voyageai-rerank";
 import { ChatMistralAI } from "@langchain/mistralai";
 
@@ -159,11 +160,15 @@ export class ModelInitializer implements IModelInitializer {
       defaultTemperature,
       defaultMaxTokens,
       apiToken,
+      baseURL,
     }) =>
       new ChatCohere({
         model: modelName,
         temperature: defaultTemperature,
-        apiKey: apiToken || this.resolveApiKey(ModelProvider.COHERE),
+        client: new CohereClient({
+          token: apiToken || this.resolveApiKey(ModelProvider.COHERE),
+          baseUrl: resolveRouterURL(baseURL),
+        }),
       }),
 
     [ModelProvider.MISTRAL]: ({
@@ -194,19 +199,23 @@ export class ModelInitializer implements IModelInitializer {
     ModelProvider,
     RerankModelCreator | undefined
   > = {
-    [ModelProvider.COHERE]: ({ modelName, apiToken, maxDocuments }) => {
+    [ModelProvider.COHERE]: ({ modelName, apiToken, maxDocuments, baseURL }) => {
       return new CohereRerank({
-        apiKey: apiToken || this.resolveApiKey(ModelProvider.COHERE),
         model: modelName,
         topN: maxDocuments || 20,
+        client: new CohereClient({
+          token: apiToken || this.resolveApiKey(ModelProvider.COHERE),
+          baseUrl: resolveRouterURL(baseURL),
+        }),
       });
     },
 
-    [ModelProvider.VOYAGEAI]: ({ modelName, apiToken, maxDocuments }) => {
+    [ModelProvider.VOYAGEAI]: ({ modelName, apiToken, maxDocuments, baseURL }) => {
       return new VoyageAIRerank({
         apiKey: apiToken || this.resolveApiKey(ModelProvider.VOYAGEAI),
         model: modelName,
         topN: maxDocuments || 20,
+        baseUrl: resolveRouterURL(baseURL),
       });
     },
 
@@ -222,10 +231,11 @@ export class ModelInitializer implements IModelInitializer {
     ModelProvider,
     EmbeddingModelCreator | undefined
   > = {
-    [ModelProvider.OPENAI]: ({ modelName, apiToken }) =>
+    [ModelProvider.OPENAI]: ({ modelName, apiToken, baseURL }) =>
       new OpenAIEmbeddings({
         model: modelName,
         apiKey: apiToken || this.resolveApiKey(ModelProvider.OPENAI),
+        configuration: { baseURL: `${resolveRouterURL(baseURL)}/v1` },
       }),
 
     // Other providers not yet implemented for embeddings
