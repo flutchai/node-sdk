@@ -7,8 +7,9 @@ import { Embeddings } from "@langchain/core/embeddings";
 import { Runnable } from "@langchain/core/runnables";
 import { BaseLanguageModelInput } from "@langchain/core/language_models/base";
 import { AIMessageChunk } from "@langchain/core/messages";
+import { DynamicStructuredTool } from "@langchain/core/tools";
 import { ModelType } from "./enums";
-import { ModelByIdConfig, ModelConfigWithToken } from "./llm.types";
+import { ModelByIdConfig, ModelConfig, ModelConfigWithToken } from "./llm.types";
 
 // Chat model with tools bound returns Runnable, not BaseChatModel
 export type ChatModelWithTools = Runnable<
@@ -43,8 +44,13 @@ export interface ModelConfigWithTokenAndType extends ModelConfigWithToken {
 
 // Universal interface for initializing different model types
 export interface IModelInitializer {
-  // Typed methods for each model type
-  // Note: createChatModelById can return Runnable when tools are bound
+  // Overloaded: ModelConfig (direct) or ModelByIdConfig (legacy DB lookup)
+  initializeChatModel(
+    config: ModelConfig | ModelByIdConfig,
+    customTools?: DynamicStructuredTool[]
+  ): Promise<ChatModelOrRunnable>;
+
+  // Typed methods for each model type (by ID)
   createChatModelById(modelId: string): Promise<ChatModelOrRunnable>;
   createRerankModelById(modelId: string): Promise<BaseDocumentCompressor>;
   createEmbeddingModelById(modelId: string): Promise<Embeddings>;
@@ -52,9 +58,6 @@ export interface IModelInitializer {
   // Universal method - automatically determines type by modelId
   createModelById(modelId: string, expectedType?: ModelType): Promise<Model>;
 
-  // Legacy methods for backward compatibility
-  // Note: initializeChatModel can return Runnable when tools are bound
-  initializeChatModel(config: ModelByIdConfig): Promise<ChatModelOrRunnable>;
   initializeRerankModel(
     config: ModelByIdConfig
   ): Promise<BaseDocumentCompressor>;

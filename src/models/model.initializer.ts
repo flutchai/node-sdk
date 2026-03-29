@@ -17,6 +17,7 @@ import {
   generateModelCacheKey as generateModelCacheKeyPure,
   buildOpenAIModelConfig,
   resolveRouterURL,
+  normalizeToolConfigs,
 } from "./model.logic";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
@@ -37,6 +38,7 @@ import {
 } from "./model.interface";
 import {
   ModelByIdConfig,
+  ModelConfig,
   ModelConfigFetcher,
   ApiKeyResolver,
 } from "./llm.types";
@@ -234,16 +236,105 @@ export class ModelInitializer implements IModelInitializer {
     [ModelProvider.VOYAGEAI]: undefined,
   };
 
+  // ══════════════════════════════════════════════════════════════
+  //  initializeChatModel — overloaded: ModelConfig | ModelByIdConfig
+  // ══════════════════════════════════════════════════════════════
+
   async initializeChatModel(
+    config: ModelConfig | ModelByIdConfig,
+    customTools?: DynamicStructuredTool[]
+  ): Promise<ChatModelOrRunnable> {
+    if ("provider" in config && "modelName" in config) {
+      return this.initializeChatModelDirect(config as ModelConfig, customTools);
+    }
+    return this.initializeChatModelByIdInternal(config as ModelByIdConfig);
+  }
+
+  /**
+   * Direct initialization by provider + modelName (no DB lookup).
+   */
+  private async initializeChatModelDirect(
+    config: ModelConfig,
+    customTools?: DynamicStructuredTool[]
+  ): Promise<ChatModelOrRunnable> {
+    const toolsConfig = normalizeToolConfigs(config.tools);
+    const modelIdentifier = `${config.provider}:${config.modelName}`;
+    const cacheKey = generateModelCacheKeyPure(
+      modelIdentifier,
+      config.temperature,
+      config.maxTokens,
+      toolsConfig,
+      config.baseURL
+    );
+
+    const cached = this.modelInstanceCache.get(cacheKey);
+    if (cached) {
+      this.logger.debug(`Using cached chat model instance: ${cacheKey}`);
+      return cached as ChatModelOrRunnable;
+    }
+
+    const provider = config.provider;
+    if (!Object.values(ModelProvider).includes(provider)) {
+      throw new Error(
+        `Unknown provider "${provider}". Valid: ${Object.values(ModelProvider).join(", ")}`
+      );
+    }
+
+    const apiToken = this.resolveApiKey(provider);
+    const temperature = config.temperature ?? 0.7;
+    const maxTokens = config.maxTokens ?? 4096;
+
+    const modelConfig: ModelConfigWithTokenAndType = {
+      modelId: modelIdentifier,
+      modelName: config.modelName,
+      provider,
+      modelType: ModelType.CHAT,
+      defaultTemperature: Number(temperature),
+      defaultMaxTokens: Number(maxTokens),
+      apiToken,
+      requiresApiKey: true,
+      baseURL: config.baseURL,
+    };
+
+    this.logger.debug(
+      `Creating chat model: ${modelIdentifier} (apiKeyResolved=${!!apiToken})`
+    );
+
+    const creator = this.chatModelCreators[provider];
+    if (!creator) {
+      throw new Error(`Chat models not supported for provider: ${provider}`);
+    }
+
+    const model = creator(modelConfig);
+
+    model.metadata = {
+      ...model.metadata,
+      modelId: modelIdentifier,
+    };
+
+    if (toolsConfig || customTools) {
+      const boundModel = await this.bindToolsToModel(
+        model,
+        toolsConfig,
+        customTools
+      );
+      this.modelInstanceCache.set(cacheKey, boundModel);
+      return boundModel;
+    }
+
+    this.modelInstanceCache.set(cacheKey, model);
+    return model;
+  }
+
+  /**
+   * Legacy initialization by model ID (DB lookup via configFetcher).
+   * @deprecated Pass ModelConfig with provider + modelName instead.
+   */
+  private async initializeChatModelByIdInternal(
     config: ModelByIdConfig
-  ): Promise<
-    | BaseChatModel
-    | Runnable<BaseLanguageModelInput, AIMessageChunk, BaseChatModelCallOptions>
-  > {
-    // Generate cache key for this specific model configuration (including tools if present)
+  ): Promise<ChatModelOrRunnable> {
     const cacheKey = this.generateModelCacheKey(config);
 
-    // Check if we already have this exact model instance cached
     const cachedModel = this.modelInstanceCache.get(cacheKey);
     if (cachedModel) {
       this.logger.debug(`Using cached chat model instance: ${cacheKey}`);
@@ -258,7 +349,6 @@ export class ModelInitializer implements IModelInitializer {
       );
     }
 
-    // Override parameters from request
     const finalConfig: ModelConfigWithTokenAndType = {
       ...modelConfig,
       defaultTemperature: Number(
@@ -272,12 +362,8 @@ export class ModelInitializer implements IModelInitializer {
 
     this.logger.debug(`Creating new chat model instance: ${cacheKey}`);
 
-    // Bedrock routing: if model is configured for Bedrock, use ChatBedrockConverse
     let model: BaseChatModel;
     if (finalConfig.useBedrock && finalConfig.bedrockModelId) {
-      this.logger.debug(
-        `Using Bedrock for model ${finalConfig.modelName}, bedrockModelId: ${finalConfig.bedrockModelId}`
-      );
       model = new ChatBedrockConverse({
         model: finalConfig.bedrockModelId,
         region: this.resolveBedrockRegion(),
@@ -295,47 +381,22 @@ export class ModelInitializer implements IModelInitializer {
       model = creator(finalConfig);
     }
 
-    // Attach modelId to model metadata - will automatically propagate to all LangChain events
     model.metadata = {
       ...model.metadata,
       modelId: config.modelId,
     };
 
-    this.logger.debug("🔧 Model initialized with metadata", {
-      modelId: config.modelId,
-      metadataKeys: Object.keys(model.metadata || {}),
-      hasModelId: !!model.metadata?.modelId,
-    });
-
-    // Bind tools if provided (toolsConfig or customTools)
-    this.logger.debug(
-      `[TOOLS CHECK] toolsConfig exists: ${!!config.toolsConfig}, customTools exists: ${!!config.customTools}`
-    );
-    if (config.toolsConfig) {
-      this.logger.debug(
-        `[TOOLS CHECK] toolsConfig length: ${config.toolsConfig.length}, content: ${JSON.stringify(config.toolsConfig)}`
-      );
-    }
-
     if (config.toolsConfig || config.customTools) {
-      this.logger.debug(
-        `[TOOLS] Calling bindToolsToModel with toolsConfig: ${JSON.stringify(config.toolsConfig)}`
-      );
       const boundModel = await this.bindToolsToModel(
         model,
         config.toolsConfig,
         config.customTools
       );
-      this.logger.debug(`[TOOLS] bindToolsToModel returned successfully`);
-
-      // Cache the model with bound tools
       this.modelInstanceCache.set(cacheKey, boundModel);
       return boundModel;
     }
 
-    // Cache the created model instance
     this.modelInstanceCache.set(cacheKey, model);
-
     return model;
   }
 

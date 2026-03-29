@@ -239,6 +239,94 @@ describe("ModelInitializer", () => {
     });
   });
 
+  describe("initializeChatModel — direct (ModelConfig)", () => {
+    it("should create OpenAI model by provider + name (no fetcher)", async () => {
+      const model = await initializer.initializeChatModel({
+        provider: ModelProvider.OPENAI,
+        modelName: "gpt-4o-mini",
+      });
+      expect((model as any)._type).toBe("ChatOpenAI");
+      expect(mockFetcher).not.toHaveBeenCalled();
+    });
+
+    it("should create Anthropic model by provider + name", async () => {
+      const model = await initializer.initializeChatModel({
+        provider: ModelProvider.ANTHROPIC,
+        modelName: "claude-3-haiku",
+      });
+      expect((model as any)._type).toBe("ChatAnthropic");
+    });
+
+    it("should create Mistral model by provider + name", async () => {
+      const model = await initializer.initializeChatModel({
+        provider: ModelProvider.MISTRAL,
+        modelName: "mistral-large",
+      });
+      expect((model as any)._type).toBe("ChatMistralAI");
+    });
+
+    it("should create Cohere model by provider + name", async () => {
+      const model = await initializer.initializeChatModel({
+        provider: ModelProvider.COHERE,
+        modelName: "command-r-plus",
+      });
+      expect((model as any)._type).toBe("ChatCohere");
+    });
+
+    it("should use default temperature (0.7) and maxTokens (4096)", async () => {
+      await initializer.initializeChatModel({
+        provider: ModelProvider.OPENAI,
+        modelName: "gpt-4o",
+      });
+      const { ChatOpenAI } = require("@langchain/openai");
+      const lastCall = ChatOpenAI.mock.calls[ChatOpenAI.mock.calls.length - 1][0];
+      expect(lastCall.temperature).toBe(0.7);
+      expect(lastCall.maxTokens).toBe(4096);
+    });
+
+    it("should use provided temperature and maxTokens", async () => {
+      await initializer.initializeChatModel({
+        provider: ModelProvider.OPENAI,
+        modelName: "gpt-4o",
+        temperature: 0.2,
+        maxTokens: 1024,
+      });
+      const { ChatOpenAI } = require("@langchain/openai");
+      const lastCall = ChatOpenAI.mock.calls[ChatOpenAI.mock.calls.length - 1][0];
+      expect(lastCall.temperature).toBe(0.2);
+      expect(lastCall.maxTokens).toBe(1024);
+    });
+
+    it("should cache model instances (same config = same reference)", async () => {
+      const m1 = await initializer.initializeChatModel({
+        provider: ModelProvider.OPENAI,
+        modelName: "gpt-4o",
+      });
+      const m2 = await initializer.initializeChatModel({
+        provider: ModelProvider.OPENAI,
+        modelName: "gpt-4o",
+      });
+      expect(m1).toBe(m2);
+    });
+
+    it("should set metadata.modelId as provider:modelName", async () => {
+      const model = await initializer.initializeChatModel({
+        provider: ModelProvider.OPENAI,
+        modelName: "gpt-4o",
+      });
+      expect((model as any).metadata.modelId).toBe("openai:gpt-4o");
+    });
+
+    it("should throw for unknown provider", async () => {
+      await expect(
+        initializer.initializeChatModel({
+          provider: "unknown" as any,
+          modelName: "test",
+        })
+      ).rejects.toThrow("Unknown provider");
+    });
+  });
+
   describe("initializeRerankModel", () => {
     it("should create Cohere rerank model", async () => {
       mockFetcher.mockResolvedValue(makeRerankConfig());
