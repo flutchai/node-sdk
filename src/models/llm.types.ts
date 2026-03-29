@@ -14,6 +14,8 @@ export interface ModelByIdConfig {
   modelId: string;
   temperature?: number;
   maxTokens?: number;
+  /** Optional custom base URL for the LLM provider. Overrides model config and FLUTCH_ROUTER_URL env. */
+  baseURL?: string;
   // Optional: tools from agent config (with settings for dynamic schemas)
   toolsConfig?: IAgentToolConfig[];
   // Optional: custom tools already prepared as DynamicStructuredTool
@@ -37,6 +39,8 @@ export interface ModelConfigWithToken {
   // Bedrock routing
   useBedrock?: boolean;
   bedrockModelId?: string;
+  /** Optional custom base URL for the LLM provider (e.g. self-hosted gateway). Falls back to FLUTCH_ROUTER_URL env or https://router.flutch.ai */
+  baseURL?: string;
 }
 
 // Callback to resolve API keys by provider (replaces scattered process.env lookups)

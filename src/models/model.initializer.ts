@@ -16,6 +16,7 @@ import {
   hashToolsConfig as hashToolsConfigPure,
   generateModelCacheKey as generateModelCacheKeyPure,
   buildOpenAIModelConfig,
+  resolveRouterURL,
 } from "./model.logic";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
@@ -109,7 +110,8 @@ export class ModelInitializer implements IModelInitializer {
       config.modelId,
       config.temperature,
       config.maxTokens,
-      config.toolsConfig
+      config.toolsConfig,
+      config.baseURL
     );
   }
 
@@ -122,6 +124,7 @@ export class ModelInitializer implements IModelInitializer {
       defaultTemperature,
       defaultMaxTokens,
       apiToken,
+      baseURL,
     }) => {
       const config = buildOpenAIModelConfig(
         modelName,
@@ -129,6 +132,7 @@ export class ModelInitializer implements IModelInitializer {
         defaultMaxTokens,
         apiToken || this.resolveApiKey(ModelProvider.OPENAI) || ""
       );
+      config.configuration = { baseURL: `${resolveRouterURL(baseURL)}/v1` };
       return new ChatOpenAI(config);
     },
 
@@ -137,6 +141,7 @@ export class ModelInitializer implements IModelInitializer {
       defaultTemperature,
       defaultMaxTokens,
       apiToken,
+      baseURL,
     }) =>
       new ChatAnthropic({
         modelName,
@@ -144,6 +149,7 @@ export class ModelInitializer implements IModelInitializer {
         maxTokens: defaultMaxTokens,
         anthropicApiKey:
           apiToken || this.resolveApiKey(ModelProvider.ANTHROPIC),
+        anthropicApiUrl: resolveRouterURL(baseURL),
       }) as unknown as BaseChatModel,
 
     [ModelProvider.COHERE]: ({
@@ -256,6 +262,7 @@ export class ModelInitializer implements IModelInitializer {
       defaultMaxTokens: Number(
         config.maxTokens ?? modelConfig.defaultMaxTokens
       ),
+      baseURL: config.baseURL ?? modelConfig.baseURL,
     };
 
     this.logger.debug(`Creating new chat model instance: ${cacheKey}`);

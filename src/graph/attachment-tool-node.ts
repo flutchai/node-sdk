@@ -157,6 +157,16 @@ export interface ExecuteToolWithAttachmentsParams {
    * Extract from config.configurable.thread_id or config.configurable.context.threadId.
    */
   threadId?: string;
+  /**
+   * Tool schema with input properties. Used to validate if the tool
+   * actually accepts the injectIntoArg parameter before auto-injection.
+   * If not provided, falls back to previous behavior: inject whenever the
+   * data arg is absent (no schema validation).
+   */
+  toolSchema?: {
+    properties?: Record<string, any>;
+    required?: string[];
+  };
 }
 
 export interface ExecuteToolWithAttachmentsResult {
@@ -188,6 +198,7 @@ export async function executeToolWithAttachments(
     injectIntoArg = "data",
     sourceAttachmentId,
     threadId,
+    toolSchema,
   } = params;
 
   // Step 1: Auto-injection
@@ -195,7 +206,14 @@ export async function executeToolWithAttachments(
   const argsWithInjection = { ...enrichedArgs };
 
   try {
-    if (shouldInjectData(argsWithInjection, attachments, injectIntoArg)) {
+    if (
+      shouldInjectData(
+        argsWithInjection,
+        attachments,
+        injectIntoArg,
+        toolSchema
+      )
+    ) {
       const attachment = sourceAttachmentId
         ? attachments[sourceAttachmentId]
         : getLatestAttachment(attachments);
@@ -283,17 +301,40 @@ export async function executeToolWithAttachments(
 
 /**
  * Check if we should inject data from attachments.
- * Condition: configured data arg is absent or undefined (not falsy —
- * empty string, 0, false are valid user-provided values).
+ * Conditions:
+ * 1. There are attachments available
+ * 2. The configured data arg is truly undefined (not falsy — empty string, 0, false are valid)
+ * 3. The tool schema actually supports the data argument (if schema is provided)
+ *
+ * @param args - The tool call arguments
+ * @param attachments - Current attachments in state
+ * @param dataArgName - Name of the argument to inject data into
+ * @param toolSchema - Optional tool schema to validate the argument is supported
  */
 function shouldInjectData(
   args: Record<string, any>,
   attachments: Record<string, IGraphAttachment>,
-  dataArgName: string
+  dataArgName: string,
+  toolSchema?: { properties?: Record<string, any>; required?: string[] }
 ): boolean {
   if (Object.keys(attachments).length === 0) return false;
+
   // Only inject when the argument is truly missing, not when it has any value
-  return args[dataArgName] === undefined;
+  if (args[dataArgName] !== undefined) return false;
+
+  // If tool schema is provided, check if the dataArgName is a valid parameter
+  if (toolSchema) {
+    const hasProperty =
+      toolSchema.properties && dataArgName in toolSchema.properties;
+    const isRequired = toolSchema.required?.includes(dataArgName);
+
+    // Only inject if the argument is defined in the schema
+    if (!hasProperty && !isRequired) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /** Exported for testing */
