@@ -199,7 +199,12 @@ export class ModelInitializer implements IModelInitializer {
     ModelProvider,
     RerankModelCreator | undefined
   > = {
-    [ModelProvider.COHERE]: ({ modelName, apiToken, maxDocuments, baseURL }) => {
+    [ModelProvider.COHERE]: ({
+      modelName,
+      apiToken,
+      maxDocuments,
+      baseURL,
+    }) => {
       return new CohereRerank({
         model: modelName,
         topN: maxDocuments || 20,
@@ -210,7 +215,12 @@ export class ModelInitializer implements IModelInitializer {
       });
     },
 
-    [ModelProvider.VOYAGEAI]: ({ modelName, apiToken, maxDocuments, baseURL }) => {
+    [ModelProvider.VOYAGEAI]: ({
+      modelName,
+      apiToken,
+      maxDocuments,
+      baseURL,
+    }) => {
       return new VoyageAIRerank({
         apiKey: apiToken || this.resolveApiKey(ModelProvider.VOYAGEAI),
         model: modelName,

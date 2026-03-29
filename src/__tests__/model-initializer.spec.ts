@@ -279,7 +279,8 @@ describe("ModelInitializer", () => {
         modelName: "gpt-4o",
       });
       const { ChatOpenAI } = require("@langchain/openai");
-      const lastCall = ChatOpenAI.mock.calls[ChatOpenAI.mock.calls.length - 1][0];
+      const lastCall =
+        ChatOpenAI.mock.calls[ChatOpenAI.mock.calls.length - 1][0];
       expect(lastCall.temperature).toBe(0.7);
       expect(lastCall.maxTokens).toBe(4096);
     });
@@ -292,7 +293,8 @@ describe("ModelInitializer", () => {
         maxTokens: 1024,
       });
       const { ChatOpenAI } = require("@langchain/openai");
-      const lastCall = ChatOpenAI.mock.calls[ChatOpenAI.mock.calls.length - 1][0];
+      const lastCall =
+        ChatOpenAI.mock.calls[ChatOpenAI.mock.calls.length - 1][0];
       expect(lastCall.temperature).toBe(0.2);
       expect(lastCall.maxTokens).toBe(1024);
     });

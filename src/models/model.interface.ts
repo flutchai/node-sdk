@@ -9,7 +9,11 @@ import { BaseLanguageModelInput } from "@langchain/core/language_models/base";
 import { AIMessageChunk } from "@langchain/core/messages";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { ModelType } from "./enums";
-import { ModelByIdConfig, ModelConfig, ModelConfigWithToken } from "./llm.types";
+import {
+  ModelByIdConfig,
+  ModelConfig,
+  ModelConfigWithToken,
+} from "./llm.types";
 
 // Chat model with tools bound returns Runnable, not BaseChatModel
 export type ChatModelWithTools = Runnable<
