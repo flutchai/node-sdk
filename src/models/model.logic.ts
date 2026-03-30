@@ -55,9 +55,14 @@ export const DEFAULT_ROUTER_URL = "https://router.flutch.ai";
 /**
  * Resolve the router base URL.
  * Priority: explicit baseURL arg > FLUTCH_ROUTER_URL env > DEFAULT_ROUTER_URL.
+ * Returns undefined when FLUTCH_API_TOKEN is not set and no explicit baseURL
+ * is provided — callers should skip router and go directly to the provider.
  */
-export function resolveRouterURL(baseURL?: string): string {
-  return baseURL ?? process.env.FLUTCH_ROUTER_URL ?? DEFAULT_ROUTER_URL;
+export function resolveRouterURL(baseURL?: string): string | undefined {
+  if (baseURL) return baseURL;
+  if (process.env.FLUTCH_ROUTER_URL) return process.env.FLUTCH_ROUTER_URL;
+  if (process.env.FLUTCH_API_TOKEN) return DEFAULT_ROUTER_URL;
+  return undefined;
 }
 
 /**
