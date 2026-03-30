@@ -5,6 +5,7 @@
 
 import { createHash } from "crypto";
 import { IAgentToolConfig } from "../tools/config";
+import { ToolConfig } from "./llm.types";
 
 /**
  * Check if a model name refers to a "reasoning model" that requires
@@ -33,6 +34,20 @@ export function hashToolsConfig(toolsConfig: IAgentToolConfig[]): string {
     .join("|");
 
   return createHash("md5").update(sorted).digest("hex").slice(0, 16);
+}
+
+/**
+ * Normalize flexible ToolConfig[] (from graph configs) into IAgentToolConfig[] (SDK internal format).
+ */
+export function normalizeToolConfigs(
+  tools?: ToolConfig[]
+): IAgentToolConfig[] | undefined {
+  if (!tools || tools.length === 0) return undefined;
+  return tools.map(t =>
+    typeof t === "string"
+      ? { toolName: t, enabled: true }
+      : { toolName: t.name, enabled: t.enabled !== false, config: t.config }
+  );
 }
 
 export const DEFAULT_ROUTER_URL = "https://router.flutch.ai";

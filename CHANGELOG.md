@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.16] - 2026-03-29
+
+### Added
+
+- `ModelConfig` interface — direct model initialization by `provider + modelName` without DB lookup / config fetcher
+- `ToolConfig` type — flexible tool reference: string `"tool_name"` or object `{ name, enabled?, config? }`
+- `normalizeToolConfigs()` — converts `ToolConfig[]` to internal `IAgentToolConfig[]` format
+- `initializeChatModel()` now accepts `ModelConfig | ModelByIdConfig` (overloaded) with optional `customTools` parameter
+- `baseUrl` parameter in `VoyageAIRerankConfig` for custom endpoint routing
+- Exported `model.logic` utilities (`isReasoningModel`, `hashToolsConfig`, `normalizeToolConfigs`, `generateModelCacheKey`, `buildOpenAIModelConfig`, `resolveRouterURL`) from package index
+
+### Changed
+
+- **All providers now route through the internal gateway** (`router.flutch.ai`):
+  - `COHERE` chat — uses `CohereClient` with `baseUrl` (LangChain wrapper doesn't expose this param directly)
+  - `COHERE` rerank — same `CohereClient` approach
+  - `VOYAGEAI` rerank — new `baseUrl` config passed as `{routerURL}/v1/rerank`
+  - `OPENAI` embeddings — `configuration.baseURL` set to `{routerURL}/v1`
+  - (OpenAI chat, Anthropic chat, Mistral chat were already routed in v0.2.12–0.2.15)
+- `ModelByIdConfig` marked `@deprecated` — use `ModelConfig` with `provider + modelName` instead
+- Legacy `initializeChatModelByIdInternal` refactored as private, cleaned up verbose debug logging
+
+### Updated
+
+- `@types/jest` ^29 → ^30, `@types/node` ^20 → ^25
+
 ## [0.2.15] - 2026-03-29
 
 ### Changed
@@ -578,7 +604,8 @@ export class MyBuilder extends ExternalGraphBuilder<"1.0.0"> { ... }
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.2.9...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.2.16...HEAD
+[0.2.16]: https://github.com/flutchai/node-sdk/compare/v0.2.15...v0.2.16
 [0.2.9]: https://github.com/flutchai/node-sdk/compare/v0.2.8...v0.2.9
 [0.2.8]: https://github.com/flutchai/node-sdk/compare/v0.2.7...v0.2.8
 [0.2.7]: https://github.com/flutchai/node-sdk/compare/v0.2.6...v0.2.7

@@ -9,7 +9,32 @@ import { Runnable } from "@langchain/core/runnables";
 import { BaseLanguageModelInput } from "@langchain/core/language_models/base";
 import { AIMessageChunk } from "@langchain/core/messages";
 
-// Interface for initialization by model ID
+// ── New: direct model initialization by provider + name ──
+
+/** Flexible tool reference for graph configs */
+export type ToolConfig =
+  | string
+  | { name: string; enabled?: boolean; config?: Record<string, any> };
+
+/** Serializable model config — used for config storage and initialization */
+export interface ModelConfig {
+  provider: ModelProvider;
+  modelName: string;
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+  tools?: ToolConfig[];
+  /** Optional custom base URL for the LLM provider */
+  baseURL?: string;
+  /** Provider-specific params passed through to LangChain constructor */
+  providerConfig?: Record<string, any>;
+}
+
+// ── Legacy: initialization by model ID (DB lookup) ──
+
+/**
+ * @deprecated Use ModelConfig with provider + modelName instead
+ */
 export interface ModelByIdConfig {
   modelId: string;
   temperature?: number;

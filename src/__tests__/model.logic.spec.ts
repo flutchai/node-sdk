@@ -3,6 +3,7 @@ import {
   hashToolsConfig,
   generateModelCacheKey,
   buildOpenAIModelConfig,
+  normalizeToolConfigs,
 } from "../models/model.logic";
 import { IAgentToolConfig } from "../tools/config";
 
@@ -89,6 +90,53 @@ describe("model.logic", () => {
 
     it("should not append hash for empty toolsConfig", () => {
       expect(generateModelCacheKey("m1", 0.5, 1024, [])).toBe("m1:0.5:1024");
+    });
+  });
+
+  describe("normalizeToolConfigs", () => {
+    it("returns undefined for undefined input", () => {
+      expect(normalizeToolConfigs(undefined)).toBeUndefined();
+    });
+
+    it("returns undefined for empty array", () => {
+      expect(normalizeToolConfigs([])).toBeUndefined();
+    });
+
+    it("normalizes string tools", () => {
+      expect(normalizeToolConfigs(["tool1", "tool2"])).toEqual([
+        { toolName: "tool1", enabled: true },
+        { toolName: "tool2", enabled: true },
+      ]);
+    });
+
+    it("normalizes object tools", () => {
+      expect(
+        normalizeToolConfigs([
+          { name: "tool1", enabled: true, config: { key: "val" } },
+          { name: "tool2", enabled: false },
+        ])
+      ).toEqual([
+        { toolName: "tool1", enabled: true, config: { key: "val" } },
+        { toolName: "tool2", enabled: false, config: undefined },
+      ]);
+    });
+
+    it("normalizes mixed string and object tools", () => {
+      expect(
+        normalizeToolConfigs([
+          "string_tool",
+          { name: "object_tool", config: { x: 1 } },
+        ])
+      ).toEqual([
+        { toolName: "string_tool", enabled: true },
+        { toolName: "object_tool", enabled: true, config: { x: 1 } },
+      ]);
+    });
+
+    it("defaults enabled to true for object tools without enabled field", () => {
+      expect(normalizeToolConfigs([{ name: "tool1" }])).toEqual([
+        { toolName: "tool1", enabled: true, config: undefined },
+      ]);
     });
   });
 

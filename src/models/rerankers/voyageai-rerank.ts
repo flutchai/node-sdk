@@ -6,6 +6,7 @@ export interface VoyageAIRerankConfig {
   model?: string;
   topN?: number;
   truncation?: boolean;
+  baseUrl?: string;
 }
 
 /**
@@ -18,7 +19,7 @@ export class VoyageAIRerank extends BaseDocumentCompressor {
   private model: string;
   private topN: number;
   private truncation: boolean;
-  private baseUrl = "https://api.voyageai.com/v1/rerank";
+  private baseUrl: string;
 
   constructor(config: VoyageAIRerankConfig) {
     super();
@@ -26,6 +27,9 @@ export class VoyageAIRerank extends BaseDocumentCompressor {
     this.model = config.model || "rerank-2";
     this.topN = config.topN || 20;
     this.truncation = config.truncation ?? true;
+    this.baseUrl = config.baseUrl
+      ? `${config.baseUrl}/v1/rerank`
+      : "https://api.voyageai.com/v1/rerank";
 
     if (!this.apiKey) {
       throw new Error(
