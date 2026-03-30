@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.17] - 2026-03-30
+
+### Added
+
+- `FLUTCH_API_TOKEN` env variable — universal API key for all providers, takes priority over provider-specific keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.)
+
+### Changed
+
+- **Conditional router routing**: providers only route through `router.flutch.ai` when `FLUTCH_API_TOKEN` is set or `FLUTCH_ROUTER_URL` / explicit `baseURL` is provided. Without these, providers go directly to their native APIs
+- `resolveRouterURL()` now returns `undefined` when no router context is detected (was always returning `DEFAULT_ROUTER_URL`)
+- `resolveApiKey()` priority: custom resolver > `FLUTCH_API_TOKEN` > provider-specific env var
+
 ## [0.2.16] - 2026-03-29
 
 ### Added
@@ -604,7 +616,8 @@ export class MyBuilder extends ExternalGraphBuilder<"1.0.0"> { ... }
 - Architecture overview
 - Quick start guide
 
-[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.2.16...HEAD
+[Unreleased]: https://github.com/flutchai/node-sdk/compare/v0.2.17...HEAD
+[0.2.17]: https://github.com/flutchai/node-sdk/compare/v0.2.16...v0.2.17
 [0.2.16]: https://github.com/flutchai/node-sdk/compare/v0.2.15...v0.2.16
 [0.2.9]: https://github.com/flutchai/node-sdk/compare/v0.2.8...v0.2.9
 [0.2.8]: https://github.com/flutchai/node-sdk/compare/v0.2.7...v0.2.8

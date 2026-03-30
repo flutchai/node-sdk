@@ -73,11 +73,14 @@ export class ModelInitializer implements IModelInitializer {
 
   /**
    * Resolve API key for a provider.
-   * Uses custom resolver if provided, falls back to process.env.
+   * Priority: custom resolver > FLUTCH_API_TOKEN > provider-specific env var.
    */
   private resolveApiKey(provider: ModelProvider): string | undefined {
     if (this.apiKeyResolver) {
       return this.apiKeyResolver(provider);
+    }
+    if (process.env.FLUTCH_API_TOKEN) {
+      return process.env.FLUTCH_API_TOKEN;
     }
     const envVar = ModelInitializer.DEFAULT_ENV_MAP[provider];
     return envVar ? process.env[envVar] : undefined;
@@ -135,7 +138,10 @@ export class ModelInitializer implements IModelInitializer {
         defaultMaxTokens,
         apiToken || this.resolveApiKey(ModelProvider.OPENAI) || ""
       );
-      config.configuration = { baseURL: `${resolveRouterURL(baseURL)}/v1` };
+      const routerURL = resolveRouterURL(baseURL);
+      if (routerURL) {
+        config.configuration = { baseURL: `${routerURL}/v1` };
+      }
       return new ChatOpenAI(config);
     },
 
@@ -152,7 +158,9 @@ export class ModelInitializer implements IModelInitializer {
         maxTokens: defaultMaxTokens,
         anthropicApiKey:
           apiToken || this.resolveApiKey(ModelProvider.ANTHROPIC),
-        anthropicApiUrl: resolveRouterURL(baseURL),
+        ...(resolveRouterURL(baseURL) && {
+          anthropicApiUrl: resolveRouterURL(baseURL),
+        }),
       }) as unknown as BaseChatModel,
 
     [ModelProvider.COHERE]: ({
@@ -161,15 +169,21 @@ export class ModelInitializer implements IModelInitializer {
       defaultMaxTokens,
       apiToken,
       baseURL,
-    }) =>
-      new ChatCohere({
-        model: modelName,
-        temperature: defaultTemperature,
-        client: new CohereClient({
-          token: apiToken || this.resolveApiKey(ModelProvider.COHERE),
-          baseUrl: resolveRouterURL(baseURL),
-        }),
-      }),
+    }) => {
+      const routerURL = resolveRouterURL(baseURL);
+      const token = apiToken || this.resolveApiKey(ModelProvider.COHERE);
+      return routerURL
+        ? new ChatCohere({
+            model: modelName,
+            temperature: defaultTemperature,
+            client: new CohereClient({ token, baseUrl: routerURL }),
+          })
+        : new ChatCohere({
+            model: modelName,
+            temperature: defaultTemperature,
+            apiKey: token,
+          });
+    },
 
     [ModelProvider.MISTRAL]: ({
       modelName,
@@ -177,17 +191,16 @@ export class ModelInitializer implements IModelInitializer {
       defaultMaxTokens,
       apiToken,
       baseURL,
-    }) =>
-      new ChatMistralAI({
+    }) => {
+      const routerURL = resolveRouterURL(baseURL);
+      return new ChatMistralAI({
         model: modelName,
         temperature: defaultTemperature,
         maxTokens: defaultMaxTokens,
         apiKey: apiToken || this.resolveApiKey(ModelProvider.MISTRAL),
-        // Route through the same gateway as OpenAI/Anthropic.
-        // Without serverURL, ChatMistralAI ignores FLUTCH_ROUTER_URL and calls
-        // api.mistral.ai directly — inconsistent with other providers.
-        serverURL: `${resolveRouterURL(baseURL)}/v1`,
-      }),
+        ...(routerURL && { serverURL: `${routerURL}/v1` }),
+      });
+    },
 
     [ModelProvider.VOYAGEAI]: () => {
       throw new Error("VoyageAI chat models not implemented");
@@ -205,14 +218,19 @@ export class ModelInitializer implements IModelInitializer {
       maxDocuments,
       baseURL,
     }) => {
-      return new CohereRerank({
-        model: modelName,
-        topN: maxDocuments || 20,
-        client: new CohereClient({
-          token: apiToken || this.resolveApiKey(ModelProvider.COHERE),
-          baseUrl: resolveRouterURL(baseURL),
-        }),
-      });
+      const routerURL = resolveRouterURL(baseURL);
+      const token = apiToken || this.resolveApiKey(ModelProvider.COHERE);
+      return routerURL
+        ? new CohereRerank({
+            model: modelName,
+            topN: maxDocuments || 20,
+            client: new CohereClient({ token, baseUrl: routerURL }),
+          })
+        : new CohereRerank({
+            model: modelName,
+            topN: maxDocuments || 20,
+            apiKey: token,
+          });
     },
 
     [ModelProvider.VOYAGEAI]: ({
@@ -221,11 +239,12 @@ export class ModelInitializer implements IModelInitializer {
       maxDocuments,
       baseURL,
     }) => {
+      const routerURL = resolveRouterURL(baseURL);
       return new VoyageAIRerank({
         apiKey: apiToken || this.resolveApiKey(ModelProvider.VOYAGEAI),
         model: modelName,
         topN: maxDocuments || 20,
-        baseUrl: resolveRouterURL(baseURL),
+        ...(routerURL && { baseUrl: routerURL }),
       });
     },
 
@@ -241,12 +260,16 @@ export class ModelInitializer implements IModelInitializer {
     ModelProvider,
     EmbeddingModelCreator | undefined
   > = {
-    [ModelProvider.OPENAI]: ({ modelName, apiToken, baseURL }) =>
-      new OpenAIEmbeddings({
+    [ModelProvider.OPENAI]: ({ modelName, apiToken, baseURL }) => {
+      const routerURL = resolveRouterURL(baseURL);
+      return new OpenAIEmbeddings({
         model: modelName,
         apiKey: apiToken || this.resolveApiKey(ModelProvider.OPENAI),
-        configuration: { baseURL: `${resolveRouterURL(baseURL)}/v1` },
-      }),
+        ...(routerURL && {
+          configuration: { baseURL: `${routerURL}/v1` },
+        }),
+      });
+    },
 
     // Other providers not yet implemented for embeddings
     [ModelProvider.ANTHROPIC]: undefined,
