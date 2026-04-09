@@ -102,11 +102,13 @@
     "@langchain/core": "^1.1.30",
     "@langchain/langgraph": "^1.2.0",
     "@langchain/langgraph-checkpoint-mongodb": "1.0.0",
+    "@langchain/langgraph-checkpoint-postgres": "^1.0.1",
     "@langchain/mistralai": "^1.0.7",
     "@langchain/openai": "^1.2.12",
     "axios": "^1.6.5",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
+    "ioredis-mock": "^8.9.0",
     "mongodb": "^6.20.0",
     "rxjs": "^7.8.1",
     "zod": "^3.22.4",
@@ -129,6 +131,9 @@
     "reflect-metadata": "^0.2.0"
   },
   "peerDependenciesMeta": {
+    "@langchain/langgraph-checkpoint-postgres": {
+      "optional": true
+    },
     "@nestjs/axios": {
       "optional": true
     },
