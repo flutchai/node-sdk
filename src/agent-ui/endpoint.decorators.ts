@@ -256,12 +256,6 @@ export function registerUIEndpointsFromClass(
   }
 
   // Use provided instance or create new one (for backward compatibility)
-  console.log("DEBUG: registerUIEndpointsFromClass", {
-    hasInstance: !!instance,
-    willCreateNew: !instance,
-    className: EndpointClass.name,
-  });
-
   const endpointInstance = instance || new EndpointClass();
 
   // Convert to endpoint descriptors

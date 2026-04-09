@@ -59,12 +59,6 @@ export class UIEndpointsDiscoveryService implements OnModuleInit {
         // Check if this class has UI endpoints
         if (hasUIEndpoints(metatype)) {
           this.logger.debug(`Found UI endpoints class: ${metatype.name}`);
-          console.log("DEBUG: Discovery found instance", {
-            className: metatype.name,
-            hasInstance: !!instance,
-            instanceType: typeof instance,
-          });
-
           // Register the endpoints from this class
           registerUIEndpointsFromClass(
             this.endpointRegistry,

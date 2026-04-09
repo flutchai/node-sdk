@@ -14,13 +14,11 @@ function setupRedisMock() {
     process.env.NODE_ENV === "development" &&
     !process.env.KUBERNETES_SERVICE_HOST
   ) {
-    console.log("[REDIS_MOCK] Intercepting ioredis requires for development");
     const Module = require("module");
     const originalRequire = Module.prototype.require;
 
     Module.prototype.require = function (...args: any[]) {
       if (args[0] === "ioredis") {
-        console.log("[REDIS_MOCK] Redirecting ioredis to ioredis-mock");
         return originalRequire.apply(this, ["ioredis-mock"]);
       }
       return originalRequire.apply(this, args);
