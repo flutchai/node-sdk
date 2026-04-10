@@ -175,16 +175,23 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
   }
 
   /**
-   * Build graph
+   * Build and return a compiled LangGraph for this graph type.
+   *
+   * Receives the full request payload. Access graph settings via:
+   * ```ts
+   * const settings = payload.config?.configurable?.graphSettings as MySettings;
+   * ```
+   * The returned graph must be Runnable (supports `.invoke()` / `.stream()`).
    */
-  abstract buildGraph(config: any): Promise<any>;
+  abstract buildGraph(payload: IGraphRequestPayload): Promise<unknown>;
 
   /**
    * Prepare config for graph execution
    * Deserialization happens in engine, so just pass through with customization hook
    */
-  async preparePayload(payload: IGraphRequestPayload): Promise<any> {
-    // Call customization hook - child classes can override this
+  async preparePayload(
+    payload: IGraphRequestPayload
+  ): Promise<IGraphRequestPayload> {
     const finalPayload = await this.customizeConfig(payload);
     return finalPayload;
   }
@@ -213,8 +220,9 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
    * }
    * ```
    */
-  protected async customizeConfig(payload: IGraphRequestPayload): Promise<any> {
-    // Default implementation - just return payload as is
+  protected async customizeConfig(
+    payload: IGraphRequestPayload
+  ): Promise<IGraphRequestPayload> {
     return payload;
   }
 
