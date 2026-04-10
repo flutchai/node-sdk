@@ -795,30 +795,11 @@ export class ModelInitializer implements IModelInitializer {
 
     const config = await response.json();
 
-    console.debug(
-      `ModelInitializer.fetchFromApi - API response for ${modelId}:`,
-      {
-        url,
-        statusCode: response.status,
-        configKeys: Object.keys(config),
-        modelType: config.modelType,
-        hasModelType: !!config.modelType,
-        fullConfig: config,
-      }
-    );
-
     // Extend configuration with model type
     const result = {
       ...config,
       modelType: config.modelType || ModelType.CHAT, // Fallback for compatibility
     };
-
-    console.debug(`ModelInitializer.fetchFromApi - final result:`, {
-      modelId,
-      resultModelType: result.modelType,
-      usedFallback: !config.modelType,
-      resultKeys: Object.keys(result),
-    });
 
     return result;
   }

@@ -175,16 +175,23 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
   }
 
   /**
-   * Build graph
+   * Build and return a compiled LangGraph for this graph type.
+   *
+   * Receives the full request payload. Access graph settings via:
+   * ```ts
+   * const settings = payload.config?.configurable?.graphSettings as MySettings;
+   * ```
+   * The returned graph must be Runnable (supports `.invoke()` / `.stream()`).
    */
-  abstract buildGraph(config: any): Promise<any>;
+  abstract buildGraph(payload: IGraphRequestPayload): Promise<unknown>;
 
   /**
    * Prepare config for graph execution
    * Deserialization happens in engine, so just pass through with customization hook
    */
-  async preparePayload(payload: IGraphRequestPayload): Promise<any> {
-    // Call customization hook - child classes can override this
+  async preparePayload(
+    payload: IGraphRequestPayload
+  ): Promise<IGraphRequestPayload> {
     const finalPayload = await this.customizeConfig(payload);
     return finalPayload;
   }
@@ -213,8 +220,9 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
    * }
    * ```
    */
-  protected async customizeConfig(payload: IGraphRequestPayload): Promise<any> {
-    // Default implementation - just return payload as is
+  protected async customizeConfig(
+    payload: IGraphRequestPayload
+  ): Promise<IGraphRequestPayload> {
     return payload;
   }
 
@@ -233,9 +241,6 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
       const manifestFullPath = path.resolve(this.manifestPath);
       const manifestContent = await fs.readFile(manifestFullPath, "utf-8");
       const manifest = JSON.parse(manifestContent) as IGraphManifest;
-
-      // Manifest validation disabled - new structure is used
-      // this.validateManifest(manifest);
 
       this.manifest = manifest;
       return manifest;
@@ -263,9 +268,6 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
       const manifestContent = fs.readFileSync(manifestFullPath, "utf-8");
       const manifest = JSON.parse(manifestContent) as IGraphManifest;
 
-      // Manifest validation disabled - new structure is used
-      // this.validateManifest(manifest);
-
       this.manifest = manifest;
       return manifest;
     } catch (error) {
@@ -274,15 +276,6 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
       );
       return null;
     }
-  }
-
-  /**
-   * Validate graph manifest
-   */
-  protected validateManifest(manifest: IGraphManifest): void {
-    // Validation temporarily disabled for new manifest structure
-    // TODO: Create new validator for structure with baseType and versions
-    // GraphManifestValidator.validateOrThrow(manifest);
   }
 
   /**
@@ -416,11 +409,7 @@ export class UniversalGraphService implements IGraphService {
    * Returns graph types supported by the service
    */
   async getSupportedGraphTypes(): Promise<string[]> {
-    // console.log('Registered builders:', this.builders);
-    return this.builders.map(builder => {
-      // console.log(`Builder: ${builder.constructor.name}, graphType:`, builder.graphType);
-      return builder.graphType;
-    });
+    return this.builders.map(builder => builder.graphType);
   }
 
   /**

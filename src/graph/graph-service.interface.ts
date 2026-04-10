@@ -76,6 +76,8 @@ export interface ILangGraphConfig {
     };
     metadata?: Record<string, any>;
     graphSettings?: any;
+    /** Allow custom fields added in customizeConfig overrides */
+    [key: string]: unknown;
   };
   recursionLimit?: number;
   signal?: AbortSignal;

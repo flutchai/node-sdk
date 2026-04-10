@@ -45,29 +45,72 @@ import {
 } from "../agent-ui";
 
 /**
- * MongoDB configuration options
+ * MongoDB configuration for conversation checkpointing.
  */
 export interface MongoDBConfig {
-  /** MongoDB connection URI */
+  /** MongoDB connection URI. Falls back to MONGODB_URI env var. */
   uri?: string;
-  /** Database name */
+  /** Database name. Falls back to MONGO_DB_NAME env var. */
   dbName?: string;
-  /** Checkpoint collection name */
+  /** Checkpoint collection name (default: "checkpoints") */
   checkpointCollectionName?: string;
-  /** Checkpoint writes collection name */
+  /** Checkpoint writes collection name (default: "checkpoint_writes") */
   checkpointWritesCollectionName?: string;
 }
 
 /**
- * Options for UniversalGraphModule configuration
+ * PostgreSQL configuration for conversation checkpointing.
+ *
+ * Requires `@langchain/langgraph-checkpoint-postgres` to be installed.
+ *
+ * @example
+ * UniversalGraphModule.forRoot({
+ *   postgres: { connectionString: process.env.DATABASE_URL },
+ * })
+ */
+export interface PostgresConfig {
+  /**
+   * PostgreSQL connection string.
+   * Falls back to DATABASE_URL env var when not provided.
+   *
+   * @example "postgresql://user:pass@localhost:5432/mydb"
+   */
+  connectionString?: string;
+  /**
+   * Database schema for checkpoint tables (default: "public").
+   * Useful for multi-tenant setups.
+   */
+  schema?: string;
+}
+
+/**
+ * Options for UniversalGraphModule.forRoot()
  */
 export interface UniversalGraphModuleOptions {
-  /** Graph engine type */
+  /** Graph engine type (default: LANGGRAPH) */
   engineType?: GraphEngineType;
   /** Versioning configurations for graphs */
   versioning?: VersioningConfig[];
-  /** MongoDB configuration for checkpointer */
+  /**
+   * Redis connection URL for the callback system (idempotency, rate limiting, state).
+   * Falls back to REDIS_URL env var.
+   * If neither is provided, an in-memory store is used — fine for single-instance
+   * deployments but not suitable for horizontal scaling.
+   */
+  redis?: { url: string };
+  /**
+   * Postgres checkpointer — recommended for new projects.
+   * Re-uses the same Postgres instance as the rest of the app.
+   * Requires `@langchain/langgraph-checkpoint-postgres` peer dependency.
+   */
+  postgres?: PostgresConfig;
+  /**
+   * MongoDB checkpointer — use if your app already runs MongoDB.
+   * Requires `mongoose` peer dependency.
+   */
   mongodb?: MongoDBConfig;
+  // If neither postgres nor mongodb is configured, the module falls back to
+  // an in-memory checkpointer (no persistence across restarts).
 }
 
 /**
@@ -162,6 +205,131 @@ function createMetaBuilder(
   return VersionRouter;
 }
 
+/**
+ * Build the CHECKPOINTER provider(s) based on the supplied options.
+ *
+ * Selection order:
+ *   1. postgres  — uses @langchain/langgraph-checkpoint-postgres
+ *   2. mongodb   — uses @langchain/langgraph-checkpoint-mongodb
+ *   3. (none)    — falls back to MemorySaver (no persistence, warns at startup)
+ */
+function buildCheckpointerProviders(
+  options: UniversalGraphModuleOptions
+): Provider[] {
+  const logger = new Logger("UniversalGraphModule");
+
+  // ── Postgres ──────────────────────────────────────────────────────────────
+  if (options.postgres !== undefined) {
+    return [
+      {
+        provide: "CHECKPOINTER",
+        useFactory: async () => {
+          const { PostgresSaver } = await import(
+            // Dynamic import keeps the package optional at build time
+            "@langchain/langgraph-checkpoint-postgres" as string
+          );
+
+          const connString =
+            options.postgres!.connectionString ?? process.env.DATABASE_URL;
+
+          if (!connString) {
+            throw new Error(
+              "[UniversalGraphModule] Postgres checkpointer: provide postgres.connectionString " +
+                "or set the DATABASE_URL environment variable."
+            );
+          }
+
+          logger.log(
+            `Checkpointer: PostgreSQL (${connString.replace(/:[^:@]+@/, ":***@")})`
+          );
+
+          const saver = PostgresSaver.fromConnString(connString, {
+            ...(options.postgres!.schema
+              ? { schema: options.postgres!.schema }
+              : {}),
+          });
+
+          // Creates checkpoint tables the first time (idempotent)
+          await saver.setup();
+          return saver;
+        },
+      },
+    ];
+  }
+
+  // ── MongoDB ───────────────────────────────────────────────────────────────
+  if (options.mongodb !== undefined) {
+    return [
+      {
+        provide: "MONGO_CONNECTION",
+        useFactory: async (
+          configService: ConfigService
+        ): Promise<Connection> => {
+          const mongoUri =
+            options.mongodb?.uri ||
+            configService.get<string>("MONGODB_URI") ||
+            process.env.MONGODB_URI;
+          const dbName =
+            options.mongodb?.dbName ||
+            configService.get<string>("MONGO_DB_NAME") ||
+            process.env.MONGO_DB_NAME;
+
+          if (!mongoUri) {
+            throw new Error(
+              "[UniversalGraphModule] MongoDB checkpointer: provide mongodb.uri " +
+                "or set the MONGODB_URI environment variable."
+            );
+          }
+
+          logger.log(`Checkpointer: MongoDB (${mongoUri.substring(0, 50)}...)`);
+          await mongoose.connect(mongoUri, { dbName });
+          return mongoose.connection;
+        },
+        inject: [ConfigService],
+      },
+      {
+        provide: "CHECKPOINTER",
+        useFactory: async (
+          connection: Connection,
+          configService: ConfigService
+        ) => {
+          const dbName =
+            options.mongodb?.dbName ||
+            configService.get<string>("MONGO_DB_NAME") ||
+            process.env.MONGO_DB_NAME;
+
+          const mongoClient = createMongoClientAdapter(connection.getClient());
+          return new MongoDBSaver({
+            client: mongoClient,
+            dbName,
+            checkpointCollectionName:
+              options.mongodb?.checkpointCollectionName ?? "checkpoints",
+            checkpointWritesCollectionName:
+              options.mongodb?.checkpointWritesCollectionName ??
+              "checkpoint_writes",
+          });
+        },
+        inject: ["MONGO_CONNECTION", ConfigService],
+      },
+    ];
+  }
+
+  // ── In-memory fallback ────────────────────────────────────────────────────
+  return [
+    {
+      provide: "CHECKPOINTER",
+      useFactory: async () => {
+        const { MemorySaver } = await import("@langchain/langgraph");
+        logger.warn(
+          "Checkpointer: MemorySaver (in-process, no persistence). " +
+            "Configure postgres or mongodb in UniversalGraphModule.forRoot() for production."
+        );
+        return new MemorySaver();
+      },
+    },
+  ];
+}
+
 @Module({})
 export class UniversalGraphModule {
   static forRoot(options: UniversalGraphModuleOptions): DynamicModule {
@@ -184,12 +352,26 @@ export class UniversalGraphModule {
       GraphEngineFactory,
       VersionedGraphService,
       UniversalGraphService,
-      // Callback infrastructure - Redis client (ioredis or ioredis-mock via main.ts interceptor)
+      // Callback infrastructure — Redis or in-memory fallback
       {
         provide: "REDIS_CLIENT",
         useFactory: () => {
-          const Redis = require("ioredis");
-          return new Redis(process.env.REDIS_URL || "redis://redis:6379");
+          const redisUrl = options.redis?.url ?? process.env.REDIS_URL;
+          if (redisUrl) {
+            const Redis = require("ioredis");
+            const logger = new Logger("UniversalGraphModule");
+            logger.log(
+              `Callbacks: Redis (${redisUrl.replace(/:[^:@]+@/, ":***@")})`
+            );
+            return new Redis(redisUrl);
+          }
+          // In-memory fallback — no external dependencies required
+          const IORedisMock = require("ioredis-mock");
+          new Logger("UniversalGraphModule").warn(
+            "Callbacks: in-memory store (single-instance only). " +
+              "Set redis.url or REDIS_URL for production."
+          );
+          return new IORedisMock();
         },
       },
       {
@@ -296,82 +478,9 @@ export class UniversalGraphModule {
         },
         inject: [CallbackRegistry],
       },
-      // MongoDB connection (optional - only if mongodb config provided)
-      ...(options.mongodb
-        ? [
-            {
-              provide: "MONGO_CONNECTION",
-              useFactory: async (
-                configService: ConfigService
-              ): Promise<Connection> => {
-                const logger = new Logger("UniversalGraphModule");
-                const mongoUri =
-                  options.mongodb?.uri ||
-                  configService.get<string>("MONGODB_URI") ||
-                  process.env.MONGODB_URI;
-                const dbName =
-                  options.mongodb?.dbName ||
-                  configService.get<string>("MONGO_DB_NAME") ||
-                  process.env.MONGO_DB_NAME;
-
-                if (!mongoUri) {
-                  throw new Error(
-                    "MONGODB_URI is not defined in options, config, or environment"
-                  );
-                }
-
-                logger.log(
-                  `Connecting to MongoDB: ${mongoUri?.substring(0, 50) + "..."}`
-                );
-                try {
-                  await mongoose.connect(mongoUri, { dbName });
-                  logger.log(
-                    `Successfully connected to MongoDB (db: ${dbName})`
-                  );
-                  return mongoose.connection;
-                } catch (error) {
-                  logger.error("Failed to connect to MongoDB", error as Error);
-                  throw error;
-                }
-              },
-              inject: [ConfigService],
-            },
-            // MongoDB checkpointer
-            {
-              provide: "CHECKPOINTER",
-              useFactory: async (
-                connection: Connection,
-                configService: ConfigService
-              ) => {
-                const logger = new Logger("UniversalGraphModule");
-                const dbName =
-                  options.mongodb?.dbName ||
-                  configService.get<string>("MONGO_DB_NAME") ||
-                  process.env.MONGO_DB_NAME;
-                const checkpointCollectionName =
-                  options.mongodb?.checkpointCollectionName || "checkpoints";
-                const checkpointWritesCollectionName =
-                  options.mongodb?.checkpointWritesCollectionName ||
-                  "checkpoint_writes";
-
-                logger.log(
-                  `Creating CHECKPOINTER with collections: ${checkpointCollectionName}, ${checkpointWritesCollectionName}`
-                );
-
-                const mongooseClient = connection.getClient();
-                const mongoClient = createMongoClientAdapter(mongooseClient);
-
-                return new MongoDBSaver({
-                  client: mongoClient,
-                  dbName,
-                  checkpointCollectionName,
-                  checkpointWritesCollectionName,
-                });
-              },
-              inject: ["MONGO_CONNECTION", ConfigService],
-            },
-          ]
-        : []),
+      // ── Checkpointer ────────────────────────────────────────────────────
+      // Priority: postgres > mongodb > memory (in-process, no persistence)
+      ...buildCheckpointerProviders(options),
       {
         provide: "GRAPH_ENGINE",
         useFactory: (langGraphEngine: LangGraphEngine) => langGraphEngine,
@@ -401,12 +510,10 @@ export class UniversalGraphModule {
           configs: VersioningConfig[],
           moduleRef: ModuleRef
         ) => {
-          console.log(
-            "🔧 VERSIONING_INITIALIZER running with configs:",
-            configs?.length || 0
+          const initLogger = new Logger("UniversalGraphModule");
+          initLogger.debug(
+            `Initializing versioning for ${configs?.length || 0} graph type(s)`
           );
-          console.log("🔧 ModuleRef available:", !!moduleRef);
-          console.log("🔧 BuilderRegistry available:", !!builderRegistry);
 
           // Deferred initialization - register configurations
           configs.forEach(config =>
@@ -422,9 +529,8 @@ export class UniversalGraphModule {
                 moduleRef
               );
               const versionRouter = new VersionRouterClass();
-              console.log(
-                "🔧 Registering VersionRouter for",
-                config.baseGraphType
+              initLogger.debug(
+                `Registered VersionRouter for ${config.baseGraphType}`
               );
               builderRegistry.registerBuilder(versionRouter);
             } else {
@@ -450,10 +556,8 @@ export class UniversalGraphModule {
               }
 
               const simpleRouter = new SimpleVersionRouter();
-              console.log(
-                "🔧 Registering SimpleRouter for",
-                config.baseGraphType,
-                "(no ModuleRef)"
+              initLogger.warn(
+                `Registered SimpleRouter for ${config.baseGraphType} (no ModuleRef)`
               );
               builderRegistry.registerBuilder(simpleRouter);
             }
