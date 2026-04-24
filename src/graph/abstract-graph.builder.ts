@@ -193,10 +193,13 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
     payload: IGraphRequestPayload
   ): Promise<IGraphRequestPayload> {
     // Auto-set checkpoint_ns to graphType if not already set
-    const checkpoint_ns = payload.config.configurable.checkpoint_ns || this.graphType;
+    const checkpoint_ns =
+      payload.config.configurable.checkpoint_ns || this.graphType;
 
     // Auto-set checkpoint_id to thread_id if not already set
-    const checkpoint_id = payload.config.configurable.checkpoint_id || payload.config.configurable.thread_id;
+    const checkpoint_id =
+      payload.config.configurable.checkpoint_id ||
+      payload.config.configurable.thread_id;
 
     this.logger.debug({
       message: "[SDK] preparePayload - setting checkpoint config",

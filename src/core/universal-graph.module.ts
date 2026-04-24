@@ -152,9 +152,7 @@ function createMetaBuilder(
         });
       } catch (error) {
         // Fallback: create instance manually
-        versionedBuilder = await moduleRef.create(
-          resolution.builderClass
-        );
+        versionedBuilder = await moduleRef.create(resolution.builderClass);
       }
 
       // IMPORTANT: Call preparePayload BEFORE buildGraph to set checkpoint_ns and checkpoint_id
