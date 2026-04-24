@@ -145,18 +145,21 @@ function createMetaBuilder(
       });
 
       // Try to get existing instance, fallback to creating new one
+      let versionedBuilder;
       try {
-        const versionedBuilder = moduleRef.get(resolution.builderClass, {
+        versionedBuilder = moduleRef.get(resolution.builderClass, {
           strict: false,
         });
-        return versionedBuilder.buildGraph(payload);
       } catch (error) {
         // Fallback: create instance manually
-        const versionedBuilder = await moduleRef.create(
+        versionedBuilder = await moduleRef.create(
           resolution.builderClass
         );
-        return versionedBuilder.buildGraph(payload);
       }
+
+      // IMPORTANT: Call preparePayload BEFORE buildGraph to set checkpoint_ns and checkpoint_id
+      const preparedPayload = await versionedBuilder.preparePayload(payload);
+      return versionedBuilder.buildGraph(preparedPayload);
     }
 
     async preparePayload(payload: IGraphRequestPayload): Promise<any> {
@@ -583,6 +586,7 @@ export class UniversalGraphModule {
       exports: [
         "GRAPH_SERVICE",
         "GRAPH_ENGINE",
+        "CHECKPOINTER",
         UniversalGraphService,
         BuilderRegistryService,
         VersionedGraphService,
