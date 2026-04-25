@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **LangGraph checkpointing**: `AbstractGraphBuilder.preparePayload()` now automatically sets `checkpoint_ns` (defaults to `graphType`) and `checkpoint_id` (defaults to `thread_id`) if not already provided. This ensures state persistence works correctly across graph invocations.
+- **UniversalGraphModule**: `buildGraph()` now calls `preparePayload()` before `buildGraph()` to guarantee checkpoint configuration is set before graph compilation.
+
+### Added
+
+- Debug logging for checkpoint configuration in `AbstractGraphBuilder.preparePayload()`
+
 ## [0.2.17] - 2026-03-30
 
 ### Added

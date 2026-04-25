@@ -187,12 +187,50 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
 
   /**
    * Prepare config for graph execution
-   * Deserialization happens in engine, so just pass through with customization hook
+   * Automatically sets checkpoint_ns and checkpoint_id if not present
    */
   async preparePayload(
     payload: IGraphRequestPayload
   ): Promise<IGraphRequestPayload> {
-    const finalPayload = await this.customizeConfig(payload);
+    // Auto-set checkpoint_ns to graphType if not already set
+    const checkpoint_ns =
+      payload.config.configurable.checkpoint_ns || this.graphType;
+
+    // Auto-set checkpoint_id to thread_id if not already set
+    const checkpoint_id =
+      payload.config.configurable.checkpoint_id ||
+      payload.config.configurable.thread_id;
+
+    this.logger.debug({
+      message: "[SDK] preparePayload - setting checkpoint config",
+      checkpoint_ns,
+      checkpoint_id,
+      thread_id: payload.config.configurable.thread_id,
+      graphType: this.graphType,
+    });
+
+    const payloadWithCheckpoint = {
+      ...payload,
+      config: {
+        ...payload.config,
+        configurable: {
+          ...payload.config.configurable,
+          checkpoint_ns,
+          checkpoint_id,
+        },
+      },
+    };
+
+    const finalPayload = await this.customizeConfig(payloadWithCheckpoint);
+
+    this.logger.debug({
+      message: "[SDK] preparePayload - final config",
+      has_checkpoint_ns: !!finalPayload.config.configurable.checkpoint_ns,
+      has_checkpoint_id: !!finalPayload.config.configurable.checkpoint_id,
+      checkpoint_ns: finalPayload.config.configurable.checkpoint_ns,
+      checkpoint_id: finalPayload.config.configurable.checkpoint_id,
+    });
+
     return finalPayload;
   }
 
