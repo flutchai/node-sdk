@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.20] - 2026-05-14
+
+### Fixed
+
+- **Trace webhook never sent for microservice graphs**: `LangGraphEngine.sendTraceFromAccumulator()` was reading `config.configurable?.context`, but the parameter is actually the full `IGraphRequestPayload` (shape `{requestId, input, config: {configurable: {context}}}`), so the path resolved to `undefined` and the webhook was always skipped. As a result, no trace events from microservices (e.g. `campaigns-automation`) ever reached the backend's `/internal/usage/trace-events/batch` endpoint, and the admin trace UI stayed empty for those graphs. Now reads from `preparedPayload.config?.configurable?.context` with a fallback to the legacy flat shape, mirroring `extractThreadId()`.
+
+## [0.2.19] - 2026-04-24
+
 ### Fixed
 
 - **LangGraph checkpointing**: `AbstractGraphBuilder.preparePayload()` now automatically sets `checkpoint_ns` (defaults to `graphType`) and `checkpoint_id` (defaults to `thread_id`) if not already provided. This ensures state persistence works correctly across graph invocations.
