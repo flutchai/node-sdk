@@ -198,15 +198,20 @@ export class LangGraphEngine implements IGraphEngine {
    */
   private async sendTraceFromAccumulator(
     acc: ReturnType<EventProcessor["createAccumulator"]>,
-    config: any,
+    preparedPayload: any,
     error: Error | null
   ): Promise<void> {
     try {
       const { trace } = this.eventProcessor.getResult(acc);
 
-      if (trace && trace.events.length > 0 && config.configurable?.context) {
-        const context = config.configurable.context;
+      // Context lives under `preparedPayload.config.configurable.context` per
+      // IGraphRequestPayload, but some call sites historically passed the inner
+      // config object directly — accept both shapes.
+      const context =
+        preparedPayload.config?.configurable?.context ||
+        preparedPayload.configurable?.context;
 
+      if (trace && trace.events.length > 0 && context) {
         this.logger.debug("[TRACE-WEBHOOK] Sending trace events batch", {
           messageId: context.messageId,
           totalEvents: trace.totalEvents,
@@ -237,10 +242,8 @@ export class LangGraphEngine implements IGraphEngine {
         this.logger.debug("[TRACE-WEBHOOK] Skipping webhook", {
           hasTrace: !!trace,
           traceEvents: trace?.events?.length || 0,
-          hasContext: !!config.configurable?.context,
-          contextKeys: config.configurable?.context
-            ? Object.keys(config.configurable.context)
-            : [],
+          hasContext: !!context,
+          contextKeys: context ? Object.keys(context) : [],
           hadError: !!error,
         });
       }
