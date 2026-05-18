@@ -1,6 +1,6 @@
 {
   "name": "@flutchai/flutch-sdk",
-  "version": "0.2.20",
+  "version": "0.2.21",
   "type": "module",
   "description": "Base infrastructure package for building graph microservices - core interfaces, types, utilities, and execution engine",
   "main": "./dist/index.cjs",
@@ -97,7 +97,7 @@
   },
   "dependencies": {
     "@langchain/anthropic": "^1.3.22",
-    "@langchain/aws": "^1.3.1",
+    "@langchain/aws": "^1.3.7",
     "@langchain/cohere": "^1.0.4",
     "@langchain/core": "^1.1.30",
     "@langchain/langgraph": "^1.2.0",
