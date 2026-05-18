@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.21] - 2026-05-18
+
+### Fixed
+
+- **Bedrock / Converse tool calls were invisible in the UI**: `EventProcessor` only opened a `tool_use` block when an `on_chat_model_stream` chunk delivered the tool name and id inside `chunk.content` (Anthropic-native format). `@langchain/aws` streams tool calls through `AIMessageChunk.tool_call_chunks` instead, and the Bedrock Converse wrapper drops `name`/`id` from those chunks entirely — only incremental `args` arrive. As a result `pendingToolBlocks` stayed empty, `on_tool_end` logged `⚠️ no matching tool block`, and the final `contentChains` contained only text. The IN/OUT block disappeared from the chat the moment an agent switched from Anthropic-native to Bedrock.
+  - Extended the `on_chat_model_stream` handler to also read `chunk.tool_call_chunks` and convert them to the existing Anthropic-style blocks (covers OpenAI and any other provider that uses the LangChain unified streaming format and actually populates `name`/`id`).
+  - Added a fallback in the `on_tool_start` handler: when no pending tool block exists for this tool name, synthesize one inline using `event.name` + `event.data.input` + `event.run_id`. This is the Bedrock path — at `on_tool_start` we already have the finalized tool name and arguments, so the block is opened with full IN payload and `on_tool_end` matches it by `run_id` to attach OUT. The Anthropic streaming path is untouched (a matching pending block is found and consumed as before).
+
+### Known limitation
+
+- Parallel tool calls whose `args` chunks interleave across different `index`es will still be misrouted into the most recently opened `tool_use` block when relying on the streaming converter. Bedrock's `on_tool_start` fallback is unaffected (each tool gets its own block per `run_id`). Anthropic and serial OpenAI cases are unaffected.
+
 ## [0.2.20] - 2026-05-14
 
 ### Fixed

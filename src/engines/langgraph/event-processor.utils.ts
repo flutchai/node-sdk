@@ -126,6 +126,37 @@ export class EventProcessor {
   }
 
   /**
+   * Convert LangChain unified `tool_call_chunks` (Bedrock / OpenAI streaming
+   * format) into Anthropic-style blocks so the rest of the pipeline can stay
+   * uniform. The first chunk for a tool carries `name` (and usually `id`);
+   * subsequent chunks carry partial `args` strings that need to accumulate.
+   *
+   * NOTE: assumes tool calls arrive sequentially. Parallel tool calls with
+   * interleaved `args` chunks across different `index`es will misroute args
+   * to the most recently opened tool_use block.
+   */
+  private toolCallChunksToBlocks(toolCallChunks: any[]): any[] {
+    const blocks: any[] = [];
+    for (const tcc of toolCallChunks) {
+      if (tcc.name) {
+        blocks.push({
+          type: "tool_use",
+          id: tcc.id,
+          name: tcc.name,
+          input: "",
+        });
+      }
+      if (typeof tcc.args === "string" && tcc.args.length > 0) {
+        blocks.push({
+          type: "input_json_delta",
+          input: tcc.args,
+        });
+      }
+    }
+    return blocks;
+  }
+
+  /**
    * Extract attachments from various input formats
    * Handles both array format (IAttachment[]) and object format (Record<string, IGraphAttachment>)
    */
@@ -355,12 +386,33 @@ export class EventProcessor {
     }
 
     // 1. Streaming content from LLM (universal for all channels)
-    if (event.event === "on_chat_model_stream" && event.data?.chunk?.content) {
+    if (event.event === "on_chat_model_stream" && event.data?.chunk) {
       const channel =
         (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
-      const blocks = this.normalizeContentBlocks(event.data.chunk.content);
+      const chunk = event.data.chunk;
 
-      this.processContentStream(acc, channel, blocks, onPartial);
+      const blocks: any[] = [];
+
+      // Anthropic-native streaming: text and tool_use blocks live inside chunk.content
+      if (chunk.content) {
+        blocks.push(...this.normalizeContentBlocks(chunk.content));
+      }
+
+      // LangChain unified streaming format: AIMessageChunk.tool_call_chunks.
+      // OpenAI-style providers emit name+id+args here. Bedrock/Converse emits
+      // only incremental `args` without name/id — those chunks contribute
+      // nothing useful and the on_tool_start handler synthesizes the block
+      // instead. Conversion is still cheap and harmless either way.
+      if (
+        Array.isArray(chunk.tool_call_chunks) &&
+        chunk.tool_call_chunks.length > 0
+      ) {
+        blocks.push(...this.toolCallChunksToBlocks(chunk.tool_call_chunks));
+      }
+
+      if (blocks.length > 0) {
+        this.processContentStream(acc, channel, blocks, onPartial);
+      }
       return;
     }
 
@@ -370,13 +422,65 @@ export class EventProcessor {
         (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
       const state = acc.channels.get(channel);
       if (state && event.run_id) {
-        // Find first pending block matching tool name and move to run_id map
+        // Find first pending block matching tool name and move to run_id map.
+        // This is the Anthropic-native path: a tool_use block was already opened
+        // by on_chat_model_stream and is sitting in pendingToolBlocks.
         const idx = state.pendingToolBlocks.findIndex(
           b => b.name === event.name
         );
         if (idx !== -1) {
           const block = state.pendingToolBlocks.splice(idx, 1)[0];
           state.toolBlocksByRunId.set(event.run_id, block);
+        } else {
+          // Bedrock / Converse fallback: the streaming chunks never carried
+          // `name`/`id` for tool calls (only incremental `args`), so we never
+          // opened a tool_use block during streaming. on_tool_start is the
+          // first time we know the tool name AND have the final arguments
+          // (event.data.input) — synthesize the block here so the UI still
+          // renders an IN/OUT block and on_tool_end finds a match by run_id.
+          const toolInput = event.data?.input;
+          let inputString: string;
+          try {
+            inputString =
+              typeof toolInput === "string"
+                ? toolInput
+                : JSON.stringify(toolInput ?? {});
+          } catch {
+            inputString = "";
+          }
+          const synthesizedBlock: IContentBlock = {
+            index: state.contentChain.length + (state.currentBlock ? 1 : 0),
+            type: "tool_use",
+            name: event.name,
+            id: event.run_id,
+            input: inputString,
+            output: "",
+          };
+
+          // Finalize any in-flight text block before the tool block
+          if (state.currentBlock) {
+            state.contentChain.push(state.currentBlock);
+            state.currentBlock = null;
+          }
+          state.contentChain.push(synthesizedBlock);
+          state.toolBlocksByRunId.set(event.run_id, synthesizedBlock);
+
+          this.sendDelta(
+            channel,
+            { type: "step_started", step: synthesizedBlock },
+            onPartial
+          );
+          if (inputString.length > 0) {
+            this.sendDelta(
+              channel,
+              {
+                type: "tool_input_chunk",
+                stepId: synthesizedBlock.id,
+                chunk: inputString,
+              },
+              onPartial
+            );
+          }
         }
       }
       this.logger.log("🔧 Tool execution started", {

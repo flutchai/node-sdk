@@ -379,6 +379,156 @@ describe("EventProcessor", () => {
     });
   });
 
+  // Bedrock/Converse streams tool calls without a `name` or `id` in
+  // tool_call_chunks — only incremental `args`. As a result no tool_use block
+  // is opened during on_chat_model_stream, and the EventProcessor synthesizes
+  // one in the on_tool_start handler using event.name and event.data.input.
+  describe("processEvent - on_tool_start synthesizes block (Bedrock fallback)", () => {
+    function toolStartEventWithInput(
+      name: string,
+      runId: string,
+      input: any,
+      channel: StreamChannel = StreamChannel.TEXT
+    ) {
+      return {
+        event: "on_tool_start",
+        name,
+        run_id: runId,
+        data: { input },
+        metadata: { stream_channel: channel, langgraph_node: "agent" },
+      };
+    }
+
+    it("should create a tool_use block when no pending block existed", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        toolStartEventWithInput("find_company", "run-bedrock-1", {
+          query: "flutch",
+        })
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.toolBlocksByRunId.size).toBe(1);
+      const block = state.toolBlocksByRunId.get("run-bedrock-1")!;
+      expect(block).toEqual(
+        expect.objectContaining({
+          type: "tool_use",
+          name: "find_company",
+          id: "run-bedrock-1",
+          input: JSON.stringify({ query: "flutch" }),
+        })
+      );
+      expect(state.contentChain).toContain(block);
+    });
+
+    it("should send step_started + tool_input_chunk deltas via onPartial", () => {
+      const acc = createAccumulator();
+      const deltas: any[] = [];
+      const onPartial = (chunk: string) => deltas.push(JSON.parse(chunk));
+
+      processor.processEvent(
+        acc,
+        toolStartEventWithInput("find_company", "run-bedrock-2", {
+          query: "flutch",
+        }),
+        onPartial
+      );
+
+      expect(deltas).toEqual([
+        {
+          channel: StreamChannel.TEXT,
+          delta: {
+            type: "step_started",
+            step: expect.objectContaining({
+              type: "tool_use",
+              id: "run-bedrock-2",
+              name: "find_company",
+            }),
+          },
+        },
+        {
+          channel: StreamChannel.TEXT,
+          delta: {
+            type: "tool_input_chunk",
+            stepId: "run-bedrock-2",
+            chunk: JSON.stringify({ query: "flutch" }),
+          },
+        },
+      ]);
+    });
+
+    it("should attach on_tool_end output to the synthesized block", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        toolStartEventWithInput("find_company", "run-bedrock-3", { q: "x" })
+      );
+      processor.processEvent(
+        acc,
+        toolEndEvent("find_company", "run-bedrock-3", { result: "ok" })
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      const toolBlock = state.contentChain.find(
+        b => b.type === "tool_use" && b.id === "run-bedrock-3"
+      );
+      expect(toolBlock?.output).toBe(JSON.stringify({ result: "ok" }, null, 2));
+      expect(state.toolBlocksByRunId.size).toBe(0);
+    });
+
+    it("should NOT synthesize when a pending block from streaming already matches", () => {
+      const acc = createAccumulator();
+
+      // Anthropic-native path: tool_use opened during chat model stream
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          {
+            type: "tool_use",
+            id: "toolu_native",
+            name: "find_company",
+            input: "",
+          },
+        ])
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.pendingToolBlocks).toHaveLength(1);
+
+      processor.processEvent(
+        acc,
+        toolStartEventWithInput("find_company", "run-anthropic", {
+          q: "ignored-by-anthropic-path",
+        })
+      );
+
+      // The pending block was consumed, no duplicate synthesized
+      expect(state.pendingToolBlocks).toHaveLength(0);
+      expect(state.toolBlocksByRunId.size).toBe(1);
+      const tracked = state.toolBlocksByRunId.get("run-anthropic")!;
+      expect(tracked.id).toBe("toolu_native"); // original id, not synthesized run_id
+    });
+
+    it("should finalize an in-flight text block before synthesizing the tool block", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(acc, chatModelStreamEvent("Hello, let me check "));
+      processor.processEvent(
+        acc,
+        toolStartEventWithInput("lookup", "run-mixed", { q: "x" })
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.contentChain).toHaveLength(2);
+      expect(state.contentChain[0].type).toBe("text");
+      expect(state.contentChain[1].type).toBe("tool_use");
+      expect(state.currentBlock).toBeNull();
+    });
+  });
+
   describe("processEvent - on_tool_error", () => {
     it("should log error without crashing", () => {
       const acc = createAccumulator();
@@ -563,6 +713,207 @@ describe("EventProcessor", () => {
           id: "call_1",
         })
       );
+    });
+  });
+
+  // Bedrock and OpenAI stream tool calls through AIMessageChunk.tool_call_chunks
+  // instead of inside chunk.content. This block verifies the SDK converts that
+  // format into the same internal representation as Anthropic-native streaming
+  // so the UI keeps rendering IN/OUT blocks regardless of provider.
+  describe("processEvent - tool_call_chunks (Bedrock/OpenAI streaming)", () => {
+    function chatModelStreamChunk(
+      chunk: any,
+      channel: StreamChannel = StreamChannel.TEXT
+    ) {
+      return {
+        event: "on_chat_model_stream",
+        data: { chunk },
+        metadata: { stream_channel: channel, langgraph_node: "agent" },
+      };
+    }
+
+    it("should open a tool_use block when chunk carries name+id in tool_call_chunks", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamChunk({
+          content: "",
+          tool_call_chunks: [
+            {
+              name: "get_weather",
+              id: "toolu_abc",
+              args: "",
+              index: 0,
+              type: "tool_call_chunk",
+            },
+          ],
+        })
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.currentBlock).toEqual(
+        expect.objectContaining({
+          type: "tool_use",
+          name: "get_weather",
+          id: "toolu_abc",
+          input: "",
+        })
+      );
+      expect(state.pendingToolBlocks).toHaveLength(1);
+    });
+
+    it("should accumulate partial args across chunks as input_json_delta", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamChunk({
+          tool_call_chunks: [
+            { name: "search", id: "toolu_1", args: "", index: 0 },
+          ],
+        })
+      );
+      processor.processEvent(
+        acc,
+        chatModelStreamChunk({
+          tool_call_chunks: [{ args: '{"q":"', index: 0 }],
+        })
+      );
+      processor.processEvent(
+        acc,
+        chatModelStreamChunk({
+          tool_call_chunks: [{ args: 'flutch"}', index: 0 }],
+        })
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.currentBlock).toEqual(
+        expect.objectContaining({
+          type: "tool_use",
+          id: "toolu_1",
+          input: '{"q":"flutch"}',
+        })
+      );
+    });
+
+    it("should emit step_started + tool_input_chunk deltas via onPartial", () => {
+      const acc = createAccumulator();
+      const deltas: any[] = [];
+      const onPartial = (chunk: string) => deltas.push(JSON.parse(chunk));
+
+      processor.processEvent(
+        acc,
+        chatModelStreamChunk({
+          tool_call_chunks: [
+            { name: "get_weather", id: "toolu_x", args: "", index: 0 },
+          ],
+        }),
+        onPartial
+      );
+      processor.processEvent(
+        acc,
+        chatModelStreamChunk({
+          tool_call_chunks: [{ args: '{"city":"NYC"}', index: 0 }],
+        }),
+        onPartial
+      );
+
+      expect(deltas).toEqual([
+        {
+          channel: StreamChannel.TEXT,
+          delta: {
+            type: "step_started",
+            step: expect.objectContaining({
+              type: "tool_use",
+              id: "toolu_x",
+              name: "get_weather",
+            }),
+          },
+        },
+        {
+          channel: StreamChannel.TEXT,
+          delta: {
+            type: "tool_input_chunk",
+            stepId: "toolu_x",
+            chunk: '{"city":"NYC"}',
+          },
+        },
+      ]);
+    });
+
+    it("should match on_tool_end output to the tool_use opened via tool_call_chunks", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamChunk({
+          tool_call_chunks: [
+            { name: "get_weather", id: "toolu_match", args: "", index: 0 },
+          ],
+        })
+      );
+      processor.processEvent(acc, toolStartEvent("get_weather", "run-1"));
+      processor.processEvent(
+        acc,
+        toolEndEvent("get_weather", "run-1", { temp: 72 })
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      const allBlocks = [
+        ...state.contentChain,
+        ...(state.currentBlock ? [state.currentBlock] : []),
+      ];
+      const toolBlock = allBlocks.find(b => b.type === "tool_use");
+
+      expect(toolBlock).toEqual(
+        expect.objectContaining({
+          id: "toolu_match",
+          name: "get_weather",
+          output: JSON.stringify({ temp: 72 }, null, 2),
+        })
+      );
+      expect(state.pendingToolBlocks).toHaveLength(0);
+      expect(state.toolBlocksByRunId.size).toBe(0);
+    });
+
+    it("should process text content and tool_call_chunks in the same chunk", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamChunk({
+          content: "Let me check. ",
+          tool_call_chunks: [
+            { name: "lookup", id: "toolu_mix", args: "", index: 0 },
+          ],
+        })
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      const textBlock = state.contentChain.find(b => b.type === "text");
+      expect(textBlock?.text).toBe("Let me check. ");
+      expect(state.currentBlock).toEqual(
+        expect.objectContaining({
+          type: "tool_use",
+          id: "toolu_mix",
+          name: "lookup",
+        })
+      );
+    });
+
+    it("should ignore chunks with empty tool_call_chunks and no content", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamChunk({ tool_call_chunks: [] })
+      );
+      processor.processEvent(acc, chatModelStreamChunk({}));
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.currentBlock).toBeNull();
+      expect(state.contentChain).toHaveLength(0);
     });
   });
 
