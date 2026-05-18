@@ -486,7 +486,12 @@ describe("EventProcessor", () => {
       processor.processEvent(
         acc,
         chatModelStreamEvent([
-          { type: "tool_use", id: "toolu_native", name: "find_company", input: "" },
+          {
+            type: "tool_use",
+            id: "toolu_native",
+            name: "find_company",
+            input: "",
+          },
         ])
       );
 
@@ -510,10 +515,7 @@ describe("EventProcessor", () => {
     it("should finalize an in-flight text block before synthesizing the tool block", () => {
       const acc = createAccumulator();
 
-      processor.processEvent(
-        acc,
-        chatModelStreamEvent("Hello, let me check ")
-      );
+      processor.processEvent(acc, chatModelStreamEvent("Hello, let me check "));
       processor.processEvent(
         acc,
         toolStartEventWithInput("lookup", "run-mixed", { q: "x" })
@@ -851,10 +853,7 @@ describe("EventProcessor", () => {
           ],
         })
       );
-      processor.processEvent(
-        acc,
-        toolStartEvent("get_weather", "run-1")
-      );
+      processor.processEvent(acc, toolStartEvent("get_weather", "run-1"));
       processor.processEvent(
         acc,
         toolEndEvent("get_weather", "run-1", { temp: 72 })
