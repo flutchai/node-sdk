@@ -19,6 +19,12 @@ import {
   resolveRouterURL,
   normalizeToolConfigs,
 } from "./model.logic";
+import {
+  flutchFetch,
+  flutchMistralHook,
+  wrapCohereFetcher,
+} from "./flutch-context";
+import { fetcher as cohereDefaultFetcher } from "cohere-ai/core";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
 import { CohereRerank } from "@langchain/cohere";
@@ -140,7 +146,12 @@ export class ModelInitializer implements IModelInitializer {
       );
       const routerURL = resolveRouterURL(baseURL);
       if (routerURL) {
-        config.configuration = { baseURL: `${routerURL}/v1` };
+        // Inject flutchFetch so X-Flutch-* headers from the current
+        // AsyncLocalStorage context propagate to every router call.
+        config.configuration = {
+          baseURL: `${routerURL}/v1`,
+          fetch: flutchFetch,
+        };
       }
       return new ChatOpenAI(config);
     },
@@ -151,17 +162,20 @@ export class ModelInitializer implements IModelInitializer {
       defaultMaxTokens,
       apiToken,
       baseURL,
-    }) =>
-      new ChatAnthropic({
+    }) => {
+      const routerURL = resolveRouterURL(baseURL);
+      return new ChatAnthropic({
         modelName,
         temperature: defaultTemperature,
         maxTokens: defaultMaxTokens,
         anthropicApiKey:
           apiToken || this.resolveApiKey(ModelProvider.ANTHROPIC),
-        ...(resolveRouterURL(baseURL) && {
-          anthropicApiUrl: resolveRouterURL(baseURL),
+        ...(routerURL && {
+          anthropicApiUrl: routerURL,
+          clientOptions: { fetch: flutchFetch },
         }),
-      }) as unknown as BaseChatModel,
+      }) as unknown as BaseChatModel;
+    },
 
     [ModelProvider.COHERE]: ({
       modelName,
@@ -176,7 +190,13 @@ export class ModelInitializer implements IModelInitializer {
         ? new ChatCohere({
             model: modelName,
             temperature: defaultTemperature,
-            client: new CohereClient({ token, baseUrl: routerURL }),
+            client: new CohereClient({
+              token,
+              baseUrl: routerURL,
+              // Inject X-Flutch-* headers from the ALS context on every
+              // outbound request via the wrapped default fetcher.
+              fetcher: wrapCohereFetcher(cohereDefaultFetcher),
+            }),
           })
         : new ChatCohere({
             model: modelName,
@@ -198,7 +218,13 @@ export class ModelInitializer implements IModelInitializer {
         temperature: defaultTemperature,
         maxTokens: defaultMaxTokens,
         apiKey: apiToken || this.resolveApiKey(ModelProvider.MISTRAL),
-        ...(routerURL && { serverURL: `${routerURL}/v1` }),
+        ...(routerURL && {
+          serverURL: `${routerURL}/v1`,
+          // Mistral SDK doesn't accept a custom fetch directly — its
+          // beforeRequestHooks let us mutate the outgoing Request to add
+          // X-Flutch-* headers from the ALS context.
+          beforeRequestHooks: [flutchMistralHook],
+        }),
       });
     },
 
@@ -266,7 +292,7 @@ export class ModelInitializer implements IModelInitializer {
         model: modelName,
         apiKey: apiToken || this.resolveApiKey(ModelProvider.OPENAI),
         ...(routerURL && {
-          configuration: { baseURL: `${routerURL}/v1` },
+          configuration: { baseURL: `${routerURL}/v1`, fetch: flutchFetch },
         }),
       });
     },

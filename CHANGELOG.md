@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-18
+
+### Added
+
+- `models/flutch-context.ts`: новый модуль — `withFlutchContext()` (AsyncLocalStorage-обёртка), `getFlutchContext()`, `flutchFetch` (drop-in fetch с автоматической инжекцией `X-Flutch-Message-Id` / `X-Flutch-Agent-Id` / `X-Flutch-Thread-Id` / `X-Flutch-User-Id` / `X-Flutch-Node` из контекста).
+- `engines/langgraph/langgraph-engine.ts`: `invokeGraph` и `streamGraph` теперь автоматически устанавливают `FlutchContext` из `preparedPayload.config.configurable.context` — node-авторы не делают ничего, заголовки уезжают в роутер сами.
+- `models/model.initializer.ts`: при наличии `routerURL` пробрасывается `flutchFetch` в `ChatOpenAI` / `ChatAnthropic` / `OpenAIEmbeddings`. Для Cohere — кастомный `fetcher` через `wrapCohereFetcher(cohereDefaultFetcher)` (Cohere SDK не принимает обычный `fetch`, у него своя `Fetcher.Args` сигнатура). Для Mistral — `beforeRequestHooks: [flutchMistralHook]` (Mistral SDK мутирует `Request` через хуки, а не через custom fetch).
+- `flutchHeaders()` / `flutchMistralHook` / `wrapCohereFetcher` — публичные хелперы для подключения других LLM-клиентов с нестандартными HTTP-хуками.
+
+### Why
+
+Связано с router 0.9.0 — он парсит токены из ответа и шлёт usage-webhook бэкенду, который атомарно списывает с баланса компании. `X-Flutch-*` заголовки позволяют группировать списания по сообщению/агенту/треду в `balance_audit.metadata`. SDK берёт на себя проброс контекста графа в HTTP-слой (LangChain сам этого не делает — `RunnableConfig.metadata` идёт только в callbacks/LangSmith, не в HTTP body).
+
 ## [0.2.21] - 2026-05-18
 
 ### Fixed

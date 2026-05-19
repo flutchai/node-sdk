@@ -3,6 +3,7 @@ import { IGraphEngine } from "../../core";
 import { EventProcessor } from "./event-processor.utils";
 import { ConfigService } from "@nestjs/config";
 import { clearAttachmentDataStore } from "../../graph/attachment-tool-node";
+import { withFlutchContext, FlutchContext } from "../../models/flutch-context";
 
 /**
  * Graph engine implemented using LangGraph.js
@@ -79,38 +80,56 @@ export class LangGraphEngine implements IGraphEngine {
     preparedPayload: any,
     signal?: AbortSignal
   ): Promise<any> {
-    this.logger.debug("invokeGraph preparedPayload", preparedPayload);
+    return withFlutchContext(
+      this.extractFlutchContext(preparedPayload),
+      async () => {
+        this.logger.debug("invokeGraph preparedPayload", preparedPayload);
 
-    // Add abort signal to configuration
-    if (signal) {
-      preparedPayload.signal = signal;
-      this.logger.debug("[ENGINE] Signal assigned to preparedPayload.signal");
-    }
+        // Add abort signal to configuration
+        if (signal) {
+          preparedPayload.signal = signal;
+          this.logger.debug(
+            "[ENGINE] Signal assigned to preparedPayload.signal"
+          );
+        }
 
-    // Deserialize input if needed
-    const input = await this.deserializeInput(preparedPayload.input || {});
+        // Deserialize input if needed
+        const input = await this.deserializeInput(preparedPayload.input || {});
 
-    try {
-      const result = await graph.invoke(input, {
-        ...preparedPayload.config,
-        signal: preparedPayload.signal,
-      });
+        try {
+          const result = await graph.invoke(input, {
+            ...preparedPayload.config,
+            signal: preparedPayload.signal,
+          });
 
-      // Transform the result
-      return this.processGraphResult(result);
-    } finally {
-      // Clean up in-memory attachment data for this thread
-      const threadId = this.extractThreadId(preparedPayload);
-      if (threadId) {
-        clearAttachmentDataStore(threadId);
-        this.logger.debug(
-          `[ENGINE] Cleared attachment data store for thread: ${threadId}`
-        );
+          // Transform the result
+          return this.processGraphResult(result);
+        } finally {
+          // Clean up in-memory attachment data for this thread
+          const threadId = this.extractThreadId(preparedPayload);
+          if (threadId) {
+            clearAttachmentDataStore(threadId);
+            this.logger.debug(
+              `[ENGINE] Cleared attachment data store for thread: ${threadId}`
+            );
+          }
+        }
       }
-    }
+    );
   }
 
   async streamGraph(
+    graph: any,
+    preparedPayload: any,
+    onPartial: (chunk: string) => void,
+    signal?: AbortSignal
+  ): Promise<any> {
+    return withFlutchContext(this.extractFlutchContext(preparedPayload), () =>
+      this.streamGraphInner(graph, preparedPayload, onPartial, signal)
+    );
+  }
+
+  private async streamGraphInner(
     graph: any,
     preparedPayload: any,
     onPartial: (chunk: string) => void,
@@ -432,6 +451,27 @@ export class LangGraphEngine implements IGraphEngine {
       preparedPayload.config?.configurable?.context?.threadId ||
       undefined
     );
+  }
+
+  /**
+   * Extract Flutch billing/attribution context from the prepared payload.
+   *
+   * Read by `flutchFetch` (in node-sdk/src/models/flutch-context.ts) to
+   * attach X-Flutch-* headers to every router-bound LLM call made during
+   * this graph run.
+   */
+  private extractFlutchContext(preparedPayload: any): FlutchContext {
+    const ctx =
+      preparedPayload?.config?.configurable?.context ||
+      preparedPayload?.configurable?.context ||
+      {};
+    return {
+      messageId: ctx.messageId,
+      threadId:
+        ctx.threadId || preparedPayload?.config?.configurable?.thread_id,
+      agentId: ctx.agentId,
+      userId: ctx.userId,
+    };
   }
 
   /**
