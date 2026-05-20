@@ -17,11 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `flutchFetch` / `flutchHeaders` / `flutchMistralHook` / `wrapCohereFetcher` now also emit the internal-token header when configured, in addition to the X-Flutch-* attribution headers.
+- `flutchFetch` / `flutchHeaders` / `flutchMistralHook` / `wrapCohereFetcher` now also emit the internal-token header when configured, in addition to the X-Flutch-\* attribution headers.
 
 ### Why
 
-Pairs with router 0.10.0's new SaaS auth mode. OSS deployments keep working unchanged because `FLUTCHROUTER_INTERNAL_TOKEN` is not set on the customer side — the Bearer flutch_* flow remains the default.
+Pairs with router 0.10.0's new SaaS auth mode. OSS deployments keep working unchanged because `FLUTCHROUTER_INTERNAL_TOKEN` is not set on the customer side — the Bearer flutch\_\* flow remains the default.
 
 ## [0.3.0] - 2026-05-18
 
