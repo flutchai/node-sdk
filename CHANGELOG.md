@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-20
+
+### Added
+
+- `FlutchContext.companyId` / `FlutchContext.accountId` — propagate the originating company / account identity to the router for SaaS / trusted-internal callers.
+- **Internal (SaaS) mode**: when `FLUTCHROUTER_INTERNAL_TOKEN` env var is set, every router-bound HTTP call automatically carries the `X-Flutch-Internal-Token` header alongside `X-Flutch-Company-Id` / `X-Flutch-Account-Id` from the current ALS context. The router (≥ 0.10.0) trusts these headers as identity and skips the bearer-token validate-token round-trip, fixing the case where a multi-tenant SaaS backend was billing every LLM call against whichever single `flutch_*` token sat in env.
+- `isInternalMode()` — convenience accessor for the env-driven mode flag.
+
+### Changed
+
+- `flutchFetch` / `flutchHeaders` / `flutchMistralHook` / `wrapCohereFetcher` now also emit the internal-token header when configured, in addition to the X-Flutch-\* attribution headers.
+
+### Why
+
+Pairs with router 0.10.0's new SaaS auth mode. OSS deployments keep working unchanged because `FLUTCHROUTER_INTERNAL_TOKEN` is not set on the customer side — the Bearer flutch\_\* flow remains the default.
+
 ## [0.3.0] - 2026-05-18
 
 ### Added
