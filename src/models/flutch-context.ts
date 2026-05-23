@@ -4,20 +4,16 @@ import { AsyncLocalStorage } from "node:async_hooks";
  * Per-request context propagated from the graph entry point down to the
  * HTTP layer of every LLM call made through the Flutch router.
  *
- * Two flavours of fields live here:
+ * `agentId` is the canonical routing key in SaaS / internal trust mode
+ * (see {@link isInternalMode}): the router forwards it to the backend
+ * usage webhook, which resolves agent → company → account and bills the
+ * resolved account. The other fields are audit metadata stamped onto
+ * the resulting balance_audit row so charges can be grouped by message
+ * / thread / user / node.
  *
- *   Attribution (messageId / threadId / agentId / userId / nodeName)
- *     Optional; surfaced to the backend usage webhook as X-Flutch-*
- *     headers so that the balance_audit row created per LLM call can be
- *     grouped by the originating message / agent / thread.
- *
- *   Identity (companyId / accountId)
- *     Used in SaaS / internal trust mode (see {@link isInternalMode}).
- *     The router takes the company/account from these headers and
- *     bills it instead of looking up the bearer token. Required when
- *     the process running the SDK is the trusted multi-tenant SaaS
- *     backend; ignored by the OSS deployment which authenticates each
- *     pod with its own Bearer flutch_* token.
+ * In OSS mode (no FLUTCHROUTER_INTERNAL_TOKEN), the router authenticates
+ * the bearer flutch_* token and ignores these headers for billing —
+ * they remain available as audit metadata only.
  */
 export interface FlutchContext {
   messageId?: string;
@@ -25,8 +21,6 @@ export interface FlutchContext {
   agentId?: string;
   userId?: string;
   nodeName?: string;
-  companyId?: string;
-  accountId?: string;
 }
 
 const als = new AsyncLocalStorage<FlutchContext>();
@@ -50,8 +44,6 @@ const HEADER_MAP: Record<keyof FlutchContext, string> = {
   agentId: "x-flutch-agent-id",
   userId: "x-flutch-user-id",
   nodeName: "x-flutch-node",
-  companyId: "x-flutch-company-id",
-  accountId: "x-flutch-account-id",
 };
 
 const INTERNAL_TOKEN_HEADER = "x-flutch-internal-token";
@@ -60,9 +52,10 @@ const INTERNAL_TOKEN_HEADER = "x-flutch-internal-token";
  * True when this process is configured as the trusted SaaS backend (or
  * any other internal caller sharing the router's internal secret). The
  * SDK switches into SaaS auth mode for every router-bound request:
- * X-Flutch-Internal-Token is sent alongside X-Flutch-Company-Id /
- * X-Flutch-Account-Id, and the router uses those headers instead of
- * looking up the bearer token.
+ * X-Flutch-Internal-Token is sent alongside X-Flutch-Agent-Id (the
+ * routing key the router forwards to backend for agent→company→account
+ * resolution), and the router uses those headers instead of looking up
+ * the bearer token.
  *
  * Driven by FLUTCHROUTER_INTERNAL_TOKEN env var — same shared secret the
  * router validates against. Empty / unset → OSS mode (Bearer flutch_*).

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-23
+
+### Changed
+
+- `FlutchContext` shrinks: `companyId` and `accountId` removed. `X-Flutch-Company-Id` and `X-Flutch-Account-Id` are no longer emitted by `flutchFetch` / `flutchHeaders` / `flutchMistralHook` / `wrapCohereFetcher`. Only `X-Flutch-Agent-Id` (plus message / thread / user / node attribution headers) is propagated to the router.
+
+### Why
+
+The router now forwards `agentId` to the backend usage webhook, which resolves agent → company → account itself. Treating account/company as server-owned identifiers eliminates the spoofing surface (a compromised router-to-backend channel can no longer redirect billing) and simplifies the SDK contract. Pairs with router 0.10.1 and backend 3.3.434.
+
 ## [0.4.0] - 2026-05-20
 
 ### Added
