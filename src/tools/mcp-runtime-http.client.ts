@@ -61,7 +61,8 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
   async executeTool(
     name: string,
     args: any,
-    context?: any
+    context?: any,
+    mcpServers?: Record<string, any>[]
   ): Promise<ToolExecutionResult> {
     try {
       this.logger.debug(`Executing tool: ${name} with args:`, args);
@@ -74,6 +75,12 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
       // Add context if provided
       if (context) {
         payload.context = context;
+      }
+
+      // Inline per-tenant MCP server configs let the runtime resolve a tool
+      // that isn't in its static boot registry.
+      if (mcpServers && mcpServers.length > 0) {
+        payload.mcpServers = mcpServers;
       }
 
       const response = await this.httpClient.post("/tools/execute", payload);
@@ -141,7 +148,8 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
     toolName: string,
     enrichedArgs: Record<string, any>,
     executionContext: Record<string, any>,
-    config?: RunnableConfig
+    config?: RunnableConfig,
+    mcpServers?: Record<string, any>[]
   ): Promise<{ content: string; success: boolean; rawResult?: any }> {
     // Parse callback configuration
     const parsedConfig = parseCallbackConfigArg(config);
@@ -170,7 +178,8 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
       const result = await this.executeTool(
         toolName,
         enrichedArgs,
-        executionContext
+        executionContext,
+        mcpServers
       );
 
       // Create content (stringified for ToolMessage)

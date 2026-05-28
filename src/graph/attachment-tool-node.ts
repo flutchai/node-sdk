@@ -167,6 +167,11 @@ export interface ExecuteToolWithAttachmentsParams {
     properties?: Record<string, any>;
     required?: string[];
   };
+  /**
+   * Inline per-tenant streamable-http MCP server configs, forwarded to
+   * mcp-runtime so a tool not in the static boot registry can be resolved.
+   */
+  mcpServers?: Record<string, any>[];
 }
 
 export interface ExecuteToolWithAttachmentsResult {
@@ -199,6 +204,7 @@ export async function executeToolWithAttachments(
     sourceAttachmentId,
     threadId,
     toolSchema,
+    mcpServers,
   } = params;
 
   // Step 1: Auto-injection
@@ -245,7 +251,8 @@ export async function executeToolWithAttachments(
     toolCall.name,
     argsWithInjection,
     executionContext,
-    config
+    config,
+    mcpServers
   );
 
   // Step 3: Check if result is large and should become attachment

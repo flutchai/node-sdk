@@ -26,14 +26,17 @@ export class McpToolFilter {
    * @returns Array of LangChain Tool instances with dynamic schemas
    */
   async getFilteredTools(
-    toolsConfig: IAgentToolConfig[] = []
+    toolsConfig: IAgentToolConfig[] = [],
+    mcpServers?: Record<string, any>[],
+    context?: Record<string, any>
   ): Promise<StructuredTool[]> {
     this.logger.debug(
       `[DEBUG] Getting filtered tools with dynamic schemas. Config: ${JSON.stringify(toolsConfig)}`
     );
     this.logger.debug(`[DEBUG] MCP Runtime URL: ${this.mcpRuntimeUrl}`);
 
-    if (toolsConfig.length === 0) {
+    const hasInlineServers = !!(mcpServers && mcpServers.length > 0);
+    if (toolsConfig.length === 0 && !hasInlineServers) {
       this.logger.debug("No tools configured, returning empty array");
       return [];
     }
@@ -43,11 +46,15 @@ export class McpToolFilter {
       this.logger.debug(
         `[DEBUG] Making HTTP POST request to: ${this.mcpRuntimeUrl}/tools/schemas`
       );
-      this.logger.debug(`[DEBUG] Request body: ${JSON.stringify(toolsConfig)}`);
+
+      const requestBody: Record<string, any> = { tools: toolsConfig };
+      if (hasInlineServers) requestBody.mcpServers = mcpServers;
+      if (context) requestBody.context = context;
+      this.logger.debug(`[DEBUG] Request body: ${JSON.stringify(requestBody)}`);
 
       const response = await axios.post(
         `${this.mcpRuntimeUrl}/tools/schemas`,
-        { tools: toolsConfig },
+        requestBody,
         {
           timeout: 5000,
           headers: {

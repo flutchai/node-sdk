@@ -45,6 +45,14 @@ export interface ModelByIdConfig {
   toolsConfig?: IAgentToolConfig[];
   // Optional: custom tools already prepared as DynamicStructuredTool
   customTools?: DynamicStructuredTool[];
+  /**
+   * Optional: inline per-tenant streamable-http MCP server configs. Forwarded
+   * to mcp-runtime's /tools/schemas so their tools are discovered and bound
+   * alongside static tools. Part of the model cache key.
+   */
+  mcpServers?: Record<string, any>[];
+  /** Optional: context (companyId/agentId) for resolving inline server creds. */
+  mcpContext?: Record<string, any>;
 }
 
 // Simple fetcher function type - only modelId parameter
