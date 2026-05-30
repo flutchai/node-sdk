@@ -118,13 +118,19 @@ export class ModelInitializer implements IModelInitializer {
    * Example: "model123:0.7:4096" or "model123:0.7:4096:a1b2c3d4e5f6g7h8"
    */
   private generateModelCacheKey(config: ModelByIdConfig): string {
-    return generateModelCacheKeyPure(
+    const base = generateModelCacheKeyPure(
       config.modelId,
       config.temperature,
       config.maxTokens,
       config.toolsConfig,
       config.baseURL
     );
+    // Inline MCP servers change the bound tool set — keep cache correct.
+    // Absent → key is unchanged from before (existing agents unaffected).
+    if (config.mcpServers && config.mcpServers.length > 0) {
+      return `${base}:mcp:${JSON.stringify(config.mcpServers)}`;
+    }
+    return base;
   }
 
   // Chat model creators
@@ -455,11 +461,17 @@ export class ModelInitializer implements IModelInitializer {
       modelId: config.modelId,
     };
 
-    if (config.toolsConfig || config.customTools) {
+    if (
+      config.toolsConfig ||
+      config.customTools ||
+      (config.mcpServers && config.mcpServers.length > 0)
+    ) {
       const boundModel = await this.bindToolsToModel(
         model,
         config.toolsConfig,
-        config.customTools
+        config.customTools,
+        config.mcpServers,
+        config.mcpContext
       );
       this.modelInstanceCache.set(cacheKey, boundModel);
       return boundModel;
@@ -481,37 +493,40 @@ export class ModelInitializer implements IModelInitializer {
   private async bindToolsToModel(
     model: BaseChatModel,
     toolsConfig?: IAgentToolConfig[],
-    customTools?: DynamicStructuredTool[]
+    customTools?: DynamicStructuredTool[],
+    mcpServers?: Record<string, any>[],
+    mcpContext?: Record<string, any>
   ): Promise<
     | BaseChatModel
     | Runnable<BaseLanguageModelInput, AIMessageChunk, BaseChatModelCallOptions>
   > {
     const allTools: StructuredTool[] = [];
 
-    // Process toolsConfig (fetch dynamic schemas from MCP Runtime)
-    if (toolsConfig && toolsConfig.length > 0) {
+    // Process toolsConfig + inline per-tenant MCP servers (dynamic schemas from MCP Runtime)
+    const enabledToolsConfig = (toolsConfig || []).filter(
+      tc => tc.enabled !== false
+    );
+    const hasInlineServers = !!(mcpServers && mcpServers.length > 0);
+
+    if (enabledToolsConfig.length > 0 || hasInlineServers) {
       try {
-        // Filter enabled tools
-        const enabledToolsConfig = toolsConfig.filter(
-          tc => tc.enabled !== false
+        this.logger.debug(
+          `Fetching ${enabledToolsConfig.length} tools (+${mcpServers?.length || 0} inline server(s)) with dynamic schemas from MCP Runtime`
         );
 
-        if (enabledToolsConfig.length > 0) {
-          this.logger.debug(
-            `Fetching ${enabledToolsConfig.length} tools with dynamic schemas from MCP Runtime: ${enabledToolsConfig.map(tc => tc.toolName).join(", ")}`
-          );
+        // Use McpToolFilter to fetch tools with dynamic schemas
+        const mcpToolFilter = new McpToolFilter();
+        const mcpTools = await mcpToolFilter.getFilteredTools(
+          enabledToolsConfig,
+          mcpServers,
+          mcpContext
+        );
 
-          // Use McpToolFilter to fetch tools with dynamic schemas
-          const mcpToolFilter = new McpToolFilter();
-          const mcpTools =
-            await mcpToolFilter.getFilteredTools(enabledToolsConfig);
+        this.logger.debug(
+          `Successfully fetched ${mcpTools.length} tools with dynamic schemas from MCP Runtime`
+        );
 
-          this.logger.debug(
-            `Successfully fetched ${mcpTools.length} tools with dynamic schemas from MCP Runtime`
-          );
-
-          allTools.push(...mcpTools);
-        }
+        allTools.push(...mcpTools);
       } catch (error) {
         this.logger.error(
           `Failed to fetch tools from MCP Runtime: ${error instanceof Error ? error.message : String(error)}`

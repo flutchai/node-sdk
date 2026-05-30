@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-30
+
+### Added
+
+- `ModelByIdConfig.mcpServers` / `ModelByIdConfig.mcpContext` — optional inline per-tenant streamable-http MCP server configs (BYO). When present they are forwarded to mcp-runtime so their tools are discovered and bound alongside statically-configured tools:
+  - **Schema binding**: `bindToolsToModel` → `McpToolFilter.getFilteredTools` sends `mcpServers` (plus `context`) in `POST /tools/schemas`. `mcpServers` is folded into the model cache key, so a model bound with inline tools is never served from a stale cache hit.
+  - **Execution**: `executeToolWithAttachments` → `executeToolWithEvents` → `executeTool` include `mcpServers` in `POST /tools/execute`, so the runtime can resolve a tool that is not in its static boot registry.
+
+### Why
+
+Lets a multi-tenant caller attach a customer's own MCP servers to a single agent invocation without baking them into the runtime's boot config. Fully additive: every new parameter is optional, and when absent the cache key and request bodies are byte-for-byte identical to before — existing callers are unaffected.
+
 ## [0.4.1] - 2026-05-23
 
 ### Changed
