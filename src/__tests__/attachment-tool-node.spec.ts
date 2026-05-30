@@ -307,6 +307,7 @@ describe("attachment-tool-node", () => {
             data: JSON.stringify(attachmentData),
           }),
           expect.any(Object),
+          undefined,
           undefined
         );
       });
@@ -342,6 +343,7 @@ describe("attachment-tool-node", () => {
             data: JSON.stringify(targetData),
           }),
           expect.any(Object),
+          undefined,
           undefined
         );
       });
@@ -372,6 +374,7 @@ describe("attachment-tool-node", () => {
             input: JSON.stringify(attachmentData),
           }),
           expect.any(Object),
+          undefined,
           undefined
         );
       });
@@ -400,6 +403,7 @@ describe("attachment-tool-node", () => {
             data: "user-provided-data", // Original value preserved
           }),
           expect.any(Object),
+          undefined,
           undefined
         );
       });
@@ -429,6 +433,7 @@ describe("attachment-tool-node", () => {
             data: stringData, // Not JSON.stringify(stringData)
           }),
           expect.any(Object),
+          undefined,
           undefined
         );
       });
@@ -467,6 +472,7 @@ describe("attachment-tool-node", () => {
             // data should NOT be present
           }),
           expect.any(Object),
+          undefined,
           undefined
         );
 
@@ -513,6 +519,7 @@ describe("attachment-tool-node", () => {
             data: JSON.stringify(attachmentData),
           }),
           expect.any(Object),
+          undefined,
           undefined
         );
       });

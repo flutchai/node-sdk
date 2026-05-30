@@ -202,6 +202,7 @@ describe("Attachment data store", () => {
         "test_tool",
         expect.objectContaining({ query: "SELECT 1" }),
         expect.any(Object),
+        undefined,
         undefined
       );
 
@@ -244,6 +245,7 @@ describe("Attachment data store", () => {
           data: JSON.stringify([{ id: 1, name: "Alice" }]),
         }),
         expect.any(Object),
+        undefined,
         undefined
       );
     });
