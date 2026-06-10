@@ -17,16 +17,20 @@ module.exports = {
     "^@flutchai/flutch-sdk$": "<rootDir>/src/index.ts",
   },
   transform: {
-    "^.+\\.ts$": [
+    // uuid@14 (pulled in by @langchain/langgraph*) is ESM-only, so it must be
+    // transpiled to CJS for Jest — hence the .js transform + ignore exception.
+    "^.+\\.[tj]s$": [
       "ts-jest",
       {
         tsconfig: {
           esModuleInterop: true,
           allowSyntheticDefaultImports: true,
+          allowJs: true,
         },
       },
     ],
   },
+  transformIgnorePatterns: ["/node_modules/(?!uuid/)"],
   // Increase timeout for async tests
   testTimeout: 10000,
 };
