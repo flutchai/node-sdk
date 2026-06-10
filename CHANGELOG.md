@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-10
+
+### Changed
+
+- Dependency upgrade aligning the SDK with the Nest 11 consumer monorepo:
+  - Peer ranges widened to accept Nest 11-era packages: `@nestjs/config` `^3 || ^4`, `@nestjs/mongoose` `^10 || ^11`, `@nestjs/terminus` `^10 || ^11`, `@willsoto/nestjs-prometheus` `^5 || ^6`, `prom-client` `^14 || ^15`.
+  - **Breaking**: `@nestjs/axios` peer range moved from `^3.0.0` to `^4.0.0` — consumers still on `@nestjs/axios` 3 need to upgrade alongside.
+  - LangChain stack bumped to latest minors (`@langchain/core` 1.1.48, `@langchain/langgraph` 1.3.7, checkpoint-mongodb 1.3.3, openai/anthropic/mistralai/aws/cohere refreshed); `axios` 1.17, `class-validator` 0.15, `zod` 3.25 within the same majors.
+  - Toolchain: yarn 4.16, `@types/node` 24, `@types/express` 5, prettier 3.8; dev builds and tests verified green (tsup + DTS, jest).
+  - `mongodb` 6 / `mongoose` 8 / `zod` 3 / TypeScript 5.9 stay pinned to remain in lockstep with the consuming monorepo.
+- Repo reformatted with prettier 3.8 (new `await import(...)` wrapping style); no functional changes.
+
+### Fixed
+
+- Jest could not parse 5 test suites after the upgrade: `@langchain/langgraph*` now pulls in ESM-only `uuid@14`, which crashed CJS test runs with `SyntaxError: Unexpected token 'export'`. `jest.config.cjs` now transpiles `uuid` through ts-jest (`transformIgnorePatterns` exception + `allowJs`), restoring the full suite — 34/34 suites, 552 tests.
+
+### Why
+
+The consumer monorepo moved to Node 24 LTS / Nest 11; without the widened peer ranges, installs there fail peer resolution. Runtime behavior is unchanged — the major-version note on `@nestjs/axios` is the only action item for external consumers.
+
 ## [0.5.0] - 2026-05-30
 
 ### Added
