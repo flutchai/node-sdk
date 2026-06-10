@@ -2,8 +2,8 @@
  * Message content types
  */
 
-import { IAttachment } from "./attachments";
-import { IContentChain, IReasoningChain } from "./reasoning";
+import type { IAttachment } from "./attachments";
+import type { IContentChain, IReasoningChain } from "./reasoning";
 import { ITracingEvent, IToolCall } from "./tracing";
 
 /** Stored message content */

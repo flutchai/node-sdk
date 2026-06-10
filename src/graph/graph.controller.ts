@@ -21,7 +21,7 @@ import {
   ApiQuery,
   ApiParam,
 } from "@nestjs/swagger";
-import {
+import type {
   IGraphRequestPayload,
   IGraphResponsePayload,
   IGraphService,
