@@ -1,5 +1,5 @@
 // packages/sdk/src/interfaces/graph-registry.interface.ts
-import { IGraphService } from "./graph-service.interface";
+import type { IGraphService } from "./graph-service.interface";
 
 /**
  * Interface for graph service registry

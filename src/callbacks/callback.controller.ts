@@ -1,7 +1,10 @@
 import { Controller, Post, Req, UseGuards } from "@nestjs/common";
 import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
 import { UniversalCallbackService } from "../callbacks";
-import { CallbackTokenGuard, CallbackRequest } from "./callback-token.guard";
+import {
+  CallbackTokenGuard,
+  type CallbackRequest,
+} from "./callback-token.guard";
 
 @ApiTags("Callbacks")
 @Controller()

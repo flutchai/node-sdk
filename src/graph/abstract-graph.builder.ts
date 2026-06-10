@@ -3,7 +3,11 @@ import { Inject, Injectable, Type, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import * as path from "path";
 // Remove dependency on legacy BaseGraphService
-import { IGraphRequestPayload, IGraphResponsePayload, IGraphService } from ".";
+import type {
+  IGraphRequestPayload,
+  IGraphResponsePayload,
+  IGraphService,
+} from ".";
 import { CallbackResult } from "../callbacks";
 import { EndpointRegistry } from "../agent-ui";
 import {

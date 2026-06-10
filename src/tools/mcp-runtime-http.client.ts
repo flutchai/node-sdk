@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import axios, { AxiosInstance } from "axios";
 import {
   McpTool,
@@ -21,7 +21,7 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
   private readonly httpClient: AxiosInstance;
   private readonly baseUrl: string;
 
-  constructor(mcpRuntimeUrl?: string) {
+  constructor(@Optional() mcpRuntimeUrl?: string) {
     this.baseUrl =
       mcpRuntimeUrl || process.env.MCP_RUNTIME_URL || "http://localhost:3004";
 

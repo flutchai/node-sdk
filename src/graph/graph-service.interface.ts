@@ -1,13 +1,13 @@
 // packages/sdk/src/interfaces/graph-service.interface.ts
 import { HumanMessage } from "@langchain/core/messages";
 import { CallbackResult } from "../callbacks/callback.interface";
-import {
+import type {
   IAttachment,
   IUsageMetrics,
   IReasoningChain,
   IStoredMessageContent,
 } from "../messages";
-export {
+export type {
   IStoredMessageContent,
   IAttachment,
   IUsageMetrics,
