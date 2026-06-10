@@ -64,9 +64,8 @@ export abstract class ExternalGraphBuilder<
 
     try {
       // Dynamically import decorator utilities to avoid circular dependencies
-      const { getCallbackMetadata } = await import(
-        "../callbacks/callback.decorators.js"
-      );
+      const { getCallbackMetadata } =
+        await import("../callbacks/callback.decorators.js");
 
       // Get callback metadata from the current class
       const callbackMetadata = getCallbackMetadata(this.constructor);
@@ -133,9 +132,8 @@ export abstract class ExternalGraphBuilder<
 
     try {
       // Dynamically import decorator utilities to avoid circular dependencies
-      const { getEndpointMetadata, createEndpointDescriptors } = await import(
-        "../agent-ui"
-      );
+      const { getEndpointMetadata, createEndpointDescriptors } =
+        await import("../agent-ui");
 
       // Get endpoint metadata from the current class
       const endpointMetadata = getEndpointMetadata(this.constructor);

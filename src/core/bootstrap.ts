@@ -74,9 +74,8 @@ async function registerWithServiceDiscovery(
     );
 
     // Import FileBasedDiscovery from SDK
-    const { FileBasedDiscovery } = await import(
-      "../service-discovery/file-based.discovery"
-    );
+    const { FileBasedDiscovery } =
+      await import("../service-discovery/file-based.discovery");
 
     logger.debug(
       "[SERVICE_DISCOVERY] FileBasedDiscovery imported successfully"
@@ -92,9 +91,8 @@ async function registerWithServiceDiscovery(
     try {
       if (app) {
         // Get BuilderRegistry from application
-        const { BuilderRegistryService } = await import(
-          "./builder-registry.service"
-        );
+        const { BuilderRegistryService } =
+          await import("./builder-registry.service");
         const builderRegistry = app.get(BuilderRegistryService, {
           strict: false,
         });
@@ -111,9 +109,8 @@ async function registerWithServiceDiscovery(
           // Try to get versioned types from VersionedGraphService
           try {
             logger.debug("Attempting to import VersionedGraphService...");
-            const { VersionedGraphService } = await import(
-              "../graph/versioning/versioned-graph.service"
-            );
+            const { VersionedGraphService } =
+              await import("../graph/versioning/versioned-graph.service");
             logger.debug("VersionedGraphService imported successfully");
 
             const versionedService = app.get(VersionedGraphService, {

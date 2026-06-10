@@ -684,9 +684,8 @@ export class UniversalGraphService implements IGraphService {
     platformContext?: any
   ): Promise<CallbackResult | null> {
     // Import functions for working with decorators
-    const { getCallbackMetadata, findCallbackMethod } = await import(
-      "../callbacks/callback.decorators.js"
-    );
+    const { getCallbackMetadata, findCallbackMethod } =
+      await import("../callbacks/callback.decorators.js");
 
     // Parse token to extract graph type and handler
     const { graphType, handler } = this.parseCallbackToken(token);
