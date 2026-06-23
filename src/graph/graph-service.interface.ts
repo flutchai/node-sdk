@@ -6,12 +6,14 @@ import type {
   IUsageMetrics,
   IReasoningChain,
   IStoredMessageContent,
+  IContentChain,
 } from "../messages";
 export type {
   IStoredMessageContent,
   IAttachment,
   IUsageMetrics,
   IReasoningChain,
+  IContentChain,
 } from "../messages";
 // Minimal interfaces required for data exchange.
 // In the main system they can be extended with richer types.
@@ -115,6 +117,14 @@ export interface IGraphResponsePayload {
    * Reasoning chains
    */
   reasoningChains?: IReasoningChain[];
+
+  /**
+   * Unified content chains (text/tool_use steps). Carries the streamed
+   * "chain" structure across the microservice boundary so downstream
+   * connectors (e.g. Telegram) can split steps into separate messages and
+   * hide tool_use without collapsing the reply into a single bubble.
+   */
+  contentChains?: IContentChain[];
 
   /**
    * Metadata

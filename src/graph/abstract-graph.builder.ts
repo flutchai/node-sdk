@@ -495,6 +495,7 @@ export class UniversalGraphService implements IGraphService {
         attachments: result.attachments || [],
         metadata: result.metadata || {},
         reasoningChains: result.reasoningChains || [], // Add reasoning chains
+        contentChains: result.contentChains, // Preserve streamed chain structure
       };
     } finally {
       this.unregisterActiveGeneration(payload.requestId);
@@ -559,6 +560,7 @@ export class UniversalGraphService implements IGraphService {
         attachments: result.attachments || [],
         metadata: result.metadata || {},
         reasoningChains: result.reasoningChains || [], // Add reasoning chains
+        contentChains: result.contentChains, // Preserve streamed chain structure
       };
     } catch (error) {
       this.logger.error(`Error in streamAnswer: ${error.message}`);
