@@ -174,13 +174,6 @@ export class ModelInitializer implements IModelInitializer {
         modelName,
         temperature: defaultTemperature,
         maxTokens: defaultMaxTokens,
-        // Stream tokens even under `.invoke()` so LangGraph `streamEvents`
-        // emits `on_chat_model_stream`. Without it, nodes that call
-        // `model.invoke()` (e.g. campaigns DefaultBehaviorNode) surface only
-        // coarse `on_chain_*` events: no live SSE deltas, a sparse trace, and
-        // a content chain collapsed into one text block (no tool_use
-        // boundaries). Matches the Bedrock path, which already sets this.
-        streaming: true,
         anthropicApiKey:
           apiToken || this.resolveApiKey(ModelProvider.ANTHROPIC),
         ...(routerURL && {
