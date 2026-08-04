@@ -4,4 +4,6 @@ export * from "./llm.types";
 export * from "./model.interface";
 export * from "./model.initializer";
 export * from "./model.logic";
+export * from "./reasoning-content.logic";
+export * from "./bedrock-chat-model";
 export * from "./rerankers/voyageai-rerank";

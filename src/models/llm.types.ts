@@ -28,6 +28,13 @@ export interface ModelConfig {
   baseURL?: string;
   /** Provider-specific params passed through to LangChain constructor */
   providerConfig?: Record<string, any>;
+  /**
+   * Override the automatic sampling-parameter detection.
+   * `false` — never send temperature/topP/topK (Claude Opus 4.7+, Claude 5).
+   * `true`  — always send them, even if the model id suggests otherwise.
+   * Absent  — decided from the model identifier (see `modelAcceptsSamplingParams`).
+   */
+  supportsSamplingParams?: boolean;
 }
 
 // ── Legacy: initialization by model ID (DB lookup) ──
@@ -39,6 +46,11 @@ export interface ModelByIdConfig {
   modelId: string;
   temperature?: number;
   maxTokens?: number;
+  /**
+   * Override the automatic sampling-parameter detection for this call.
+   * See `ModelConfig.supportsSamplingParams`.
+   */
+  supportsSamplingParams?: boolean;
   /** Optional custom base URL for the LLM provider. Overrides model config and FLUTCH_ROUTER_URL env. */
   baseURL?: string;
   // Optional: tools from agent config (with settings for dynamic schemas)
@@ -65,10 +77,20 @@ export interface ModelConfigWithToken {
   modelId: string;
   modelName: string;
   provider: ModelProvider;
-  defaultTemperature: number;
-  defaultMaxTokens: number;
+  /**
+   * Absent means "do not send a temperature" — the SDK never coerces a missing
+   * value into a number (that used to produce `NaN`).
+   */
+  defaultTemperature?: number;
+  defaultMaxTokens?: number;
   apiToken?: string;
   requiresApiKey: boolean;
+  /**
+   * Optional capability flag from the model catalog. Overrides the SDK's
+   * identifier-based detection of sampling-parameter support.
+   * See `ModelConfig.supportsSamplingParams`.
+   */
+  supportsSamplingParams?: boolean;
   // Bedrock routing
   useBedrock?: boolean;
   bedrockModelId?: string;
