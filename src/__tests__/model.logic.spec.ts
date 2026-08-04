@@ -4,6 +4,9 @@ import {
   generateModelCacheKey,
   buildOpenAIModelConfig,
   normalizeToolConfigs,
+  modelAcceptsSamplingParams,
+  resolveSamplingParams,
+  toOptionalNumber,
 } from "../models/model.logic";
 import { IAgentToolConfig } from "../tools/config";
 
@@ -172,6 +175,165 @@ describe("model.logic", () => {
     it("should preserve custom temperature for legacy models", () => {
       const config = buildOpenAIModelConfig("gpt-4", 0.3, 1024, "key");
       expect(config.temperature).toBe(0.3);
+    });
+
+    it("should omit the temperature key entirely when undefined", () => {
+      const config = buildOpenAIModelConfig("gpt-4", undefined, 1024, "key");
+      expect(config).not.toHaveProperty("temperature");
+      expect(config.maxTokens).toBe(1024);
+    });
+  });
+
+  describe("toOptionalNumber", () => {
+    it.each([
+      [0.7, 0.7],
+      [0, 0],
+      ["0.5", 0.5],
+    ])("should convert %p to %p", (input, expected) => {
+      expect(toOptionalNumber(input)).toBe(expected);
+    });
+
+    it.each([undefined, null, "", "not-a-number", NaN, Infinity])(
+      "should return undefined for %p (never NaN)",
+      input => {
+        expect(toOptionalNumber(input)).toBeUndefined();
+      }
+    );
+  });
+
+  describe("modelAcceptsSamplingParams", () => {
+    // Claude Opus 4.7+ and the whole Claude 5 generation reject
+    // temperature / top_p / top_k.
+    it.each([
+      "claude-opus-4-7",
+      "claude-opus-4-8",
+      "claude-opus-5",
+      "claude-sonnet-5",
+      "claude-haiku-5",
+      "claude-fable-5",
+      "claude-mythos-5",
+      "us.anthropic.claude-opus-4-7",
+      "us.anthropic.claude-opus-4-7-20260101-v1:0",
+      "eu.anthropic.claude-sonnet-5",
+      "apac.anthropic.claude-opus-5-20260401-v1:0",
+      "anthropic.claude-opus-4-8",
+      "claude-opus-4-7@20260101", // Vertex-style
+      "CLAUDE-OPUS-5", // case-insensitive
+      "claude-opus-6", // future major
+      "claude-sonnet-6-1", // future minor
+    ])('should return false for "%s"', name => {
+      expect(modelAcceptsSamplingParams(name)).toBe(false);
+    });
+
+    // Everything at or below each family's threshold keeps temperature.
+    it.each([
+      "claude-opus-4-6",
+      "claude-opus-4-5",
+      "claude-opus-4",
+      "claude-opus-4-20250514",
+      "anthropic.claude-opus-4-20250514-v1:0",
+      "claude-sonnet-4-6",
+      "claude-sonnet-4-5",
+      "claude-sonnet-4-5-20250929",
+      "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "us.anthropic.claude-sonnet-4-6",
+      "claude-haiku-4-5",
+      "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "claude-3-5-sonnet-20241022", // legacy naming
+      "claude-3-7-sonnet-20250219",
+      "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+      "gpt-4o",
+      "gpt-5",
+      "mistral-large",
+      "command-r-plus",
+    ])('should return true for "%s"', name => {
+      expect(modelAcceptsSamplingParams(name)).toBe(true);
+    });
+
+    it("should return true for an empty/absent identifier", () => {
+      expect(modelAcceptsSamplingParams(undefined)).toBe(true);
+      expect(modelAcceptsSamplingParams("")).toBe(true);
+    });
+  });
+
+  describe("resolveSamplingParams", () => {
+    it("should pass params through for a supported model", () => {
+      const result = resolveSamplingParams(["claude-sonnet-4-5"], {
+        temperature: 0.7,
+        topP: 0.9,
+      });
+
+      expect(result.accepted).toBe(true);
+      expect(result.params).toEqual({ temperature: 0.7, topP: 0.9 });
+      expect(result.dropped).toEqual([]);
+    });
+
+    it("should drop params for an unsupported model and report them", () => {
+      const result = resolveSamplingParams(["claude-opus-5"], {
+        temperature: 0.7,
+        topP: 0.9,
+      });
+
+      expect(result.accepted).toBe(false);
+      expect(result.params).toEqual({});
+      expect(result.dropped).toEqual(["temperature", "topP"]);
+    });
+
+    it("should drop when ANY of the identifiers is an unsupported model", () => {
+      const result = resolveSamplingParams(
+        ["claude-opus-latest", "us.anthropic.claude-opus-5"],
+        { temperature: 0.7 }
+      );
+
+      expect(result.accepted).toBe(false);
+      expect(result.params).toEqual({});
+    });
+
+    it("should ignore undefined identifiers", () => {
+      const result = resolveSamplingParams(["claude-sonnet-4-5", undefined], {
+        temperature: 0.7,
+      });
+
+      expect(result.accepted).toBe(true);
+      expect(result.params.temperature).toBe(0.7);
+    });
+
+    it("should report nothing dropped when no params were requested", () => {
+      const result = resolveSamplingParams(["claude-opus-5"], {});
+
+      expect(result.accepted).toBe(false);
+      expect(result.dropped).toEqual([]);
+    });
+
+    it("should let supportsSamplingParams=true force params through", () => {
+      const result = resolveSamplingParams(
+        ["claude-opus-5"],
+        { temperature: 0.7 },
+        true
+      );
+
+      expect(result.accepted).toBe(true);
+      expect(result.params.temperature).toBe(0.7);
+    });
+
+    it("should let supportsSamplingParams=false suppress params", () => {
+      const result = resolveSamplingParams(
+        ["claude-sonnet-4-5"],
+        { temperature: 0.7 },
+        false
+      );
+
+      expect(result.accepted).toBe(false);
+      expect(result.params).toEqual({});
+      expect(result.dropped).toEqual(["temperature"]);
+    });
+
+    it("should preserve temperature=0 (not treated as absent)", () => {
+      const result = resolveSamplingParams(["claude-sonnet-4-5"], {
+        temperature: 0,
+      });
+
+      expect(result.params).toEqual({ temperature: 0 });
     });
   });
 });

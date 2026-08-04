@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-08-04
+
+### Fixed
+
+- **Claude Opus 5 died on the second model call of every tool-using conversation.** Opus 5 (and the rest of the adaptive-thinking generation) returns its reasoning **opaquely**: the Converse stream carries a single `reasoningContent` delta holding only a `signature` — no `text`, no `redactedContent`. `@langchain/aws` maps that to `{ type: "reasoning_content", reasoningText: { signature } }` and, when the message is replayed as history, forwards `reasoningText` to Bedrock verbatim (`langchainReasoningBlockToBedrockReasoningBlock`). The Converse **request** schema requires `reasoningContent.reasoningText.text` to be non-null, so Bedrock rejected the whole request:
+
+  ```
+  ValidationException: Value at 'messages.4.member.content.1.member.reasoningContent.reasoningText.text'
+  failed to satisfy constraint: Member must not be null
+  ```
+
+  The first call always succeeded; the continuation after the tool result always failed, so no multi-step (tool-calling) answer could ever complete. Reasoning blocks that Bedrock's request schema cannot represent are now removed from the outgoing history.
+
+### Added
+
+- `models/reasoning-content.logic` — pure, framework-free sanitizing helpers: `isReasoningBlock`, `isSendableReasoningBlock`, `sanitizeMessageReasoning`, `sanitizeReasoningForBedrock`.
+- `FlutchChatBedrockConverse` (`models/bedrock-chat-model`) — `ChatBedrockConverse` that runs the sanitizer in `_generate` (the `.invoke()` path) and `_streamResponseChunks` (the `.stream()` / `streamEvents` path), i.e. on every route into `convertToConverseMessages`. `ModelInitializer` now builds this class on the Bedrock branch. Everything else — tool binding, structured output, cache points, callbacks, streaming — is inherited unchanged.
+
+### Why blocks are dropped rather than repaired
+
+Three repair strategies were tried against live Bedrock (`us.anthropic.claude-opus-5`, us-east-2) with a real signature-only block:
+
+| Strategy                                               | Result                                                                                                                                                                                 |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reasoningContent.redactedContent = <signature bytes>` | **rejected** — ``Invalid `data` in `redacted_thinking` block``. `redactedContent` is a different, service-encrypted payload; a signature is not a substitute and cannot be fabricated. |
+| `reasoningText: { text: "", signature }`               | accepted — but it modifies a _signed_ block, which a provider is explicitly free to reject.                                                                                            |
+| drop the block                                         | accepted, model answers normally.                                                                                                                                                      |
+
+Dropping is therefore the rule. The single exception is a turn that was cut off mid-thinking, where dropping would leave `content: []` (rejected by Bedrock in its own right) and there are no `tool_calls` to carry the message: there the block is kept in the normalized `{ text: "", signature }` form.
+
+### Behaviour notes
+
+- **Model-agnostic, not gated on a model list.** The rule is defined purely by "would Bedrock's request schema reject this block", so it needs no per-release model table (unlike `modelAcceptsSamplingParams`, whose semantics are unrelated and untouched). A history without malformed reasoning blocks is returned **by reference** — sonnet-4.5 / 4.6, haiku, and every non-thinking model are not merely unchanged, they are not even copied.
+- **Nothing else in a message is lost.** `tool_calls`, `tool_call_chunks`, text blocks, `id`, `response_metadata` and `usage_metadata` all survive — that is what keeps the post-tool continuation working. Messages are cloned, never mutated, so LangGraph state and its checkpoints are untouched.
+- Only assistant messages are inspected; human and tool messages are passed through untouched.
+- Sanitizing is idempotent, and logs at `debug` when it fires.
+
+## [0.6.4] - 2026-08-03
+
+### Fixed
+
+- **Claude Opus 4.7+ / Claude 5 models were unusable.** The SDK always sent `temperature` to the provider, and those models removed sampling parameters from their request surface — Bedrock rejected every call with `ValidationException: The model returned the following errors: \`temperature\` is deprecated for this model.` Sampling parameters (`temperature`, `topP`, `topK`) are now omitted for models that don't accept them, on both the Bedrock branch and the direct provider branches (Anthropic/OpenAI/Cohere/Mistral).
+- **`Number(undefined)` → `NaN`.** `defaultTemperature` / `defaultMaxTokens` were coerced with `Number(...)`, so an absent value became `NaN` and was sent downstream. Absence now means "don't pass the parameter" (`toOptionalNumber`), and the key is omitted from the provider constructor rather than set to `undefined`.
+
+### Added
+
+- `modelAcceptsSamplingParams(modelIdentifier)` (exported from `models/model.logic`) — decides sampling-parameter support from the family + version encoded in the model id instead of a hardcoded list of exact strings. Thresholds: `opus` ≥ 4.7, `sonnet` ≥ 5, `haiku` ≥ 5, plus the `fable` / `mythos` families at any version. Matching is provider-agnostic, so first-party (`claude-opus-5`), Bedrock (`us.anthropic.claude-opus-4-7-20260101-v1:0`) and Vertex (`claude-opus-4-7@20260101`) identifiers all resolve; a trailing date snapshot is never mistaken for a minor version (`claude-opus-4-20250514` stays Opus 4.0). Anything unrecognized — non-Anthropic providers, legacy `claude-3-5-sonnet-*` naming, every release below its threshold — keeps sampling parameters exactly as before.
+- `resolveSamplingParams(...)` and `toOptionalNumber(...)` helpers in `models/model.logic`.
+- `supportsSamplingParams?: boolean` on `ModelConfig`, `ModelByIdConfig` and `ModelConfigWithToken` — config-level escape hatch that always wins over the identifier check (`true` = force the params through, `false` = never send them, absent = auto-detect). It is part of the model instance cache key, so two calls that differ only by this flag don't share an instance. Forward-compatible: when the model catalog grows a real capability field, the config value takes over with no SDK change.
+
+### Behaviour notes
+
+- An explicitly requested `temperature` on a model that rejects it is **ignored with a warning**, not an error — the request keeps working and the model runs at its own default sampling behaviour. A temperature that was merely inherited from a catalog default is dropped silently (debug-level).
+- **No regression for existing models**: `claude-sonnet-4-5` / `4-6`, `claude-opus-4-6` and older, `haiku-4-5`, legacy `claude-3-*`, and all non-Anthropic providers receive `temperature` exactly as before, including explicit `temperature: 0`.
+
 ## [0.6.0] - 2026-06-10
 
 ### Changed

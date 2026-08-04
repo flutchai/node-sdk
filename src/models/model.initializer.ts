@@ -2,7 +2,6 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { BaseDocumentCompressor } from "@langchain/core/retrievers/document_compressors";
 import { Embeddings } from "@langchain/core/embeddings";
 import { ChatOpenAI, OpenAIEmbeddings } from "@langchain/openai";
-import { ChatBedrockConverse } from "@langchain/aws";
 import { Logger } from "@nestjs/common";
 import { StructuredTool, DynamicStructuredTool } from "@langchain/core/tools";
 import { Runnable } from "@langchain/core/runnables";
@@ -18,12 +17,15 @@ import {
   buildOpenAIModelConfig,
   resolveRouterURL,
   normalizeToolConfigs,
+  resolveSamplingParams,
+  toOptionalNumber,
 } from "./model.logic";
 import {
   flutchFetch,
   flutchMistralHook,
   wrapCohereFetcher,
 } from "./flutch-context";
+import { FlutchChatBedrockConverse } from "./bedrock-chat-model";
 import { fetcher as cohereDefaultFetcher } from "cohere-ai/core";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
@@ -105,6 +107,47 @@ export class ModelInitializer implements IModelInitializer {
   }
 
   /**
+   * Resolve sampling parameters for a model, dropping them when the model
+   * does not accept them (Claude Opus 4.7+, Claude 5 and newer).
+   *
+   * An explicitly requested value on such a model is **ignored with a warning**
+   * rather than raising: the request must keep working, and the model runs at
+   * its own default sampling behaviour. Pass `supportsSamplingParams: true` in
+   * the config to force the params through anyway.
+   *
+   * @param modelIdentifiers every name the model is known by (catalog model
+   *   name, Bedrock model id, …) — a match on any of them drops the params
+   * @param wasExplicit whether the caller explicitly asked for these values
+   *   (as opposed to inheriting a catalog/SDK default) — controls log level
+   */
+  private resolveSampling(
+    modelIdentifiers: (string | undefined)[],
+    requested: { temperature?: number; topP?: number; topK?: number },
+    supportsSamplingParams?: boolean,
+    wasExplicit = false
+  ): { temperature?: number; topP?: number; topK?: number } {
+    const resolved = resolveSamplingParams(
+      modelIdentifiers,
+      requested,
+      supportsSamplingParams
+    );
+
+    if (!resolved.accepted && resolved.dropped.length > 0) {
+      const message =
+        `Model ${modelIdentifiers.filter(Boolean).join(" / ")} does not accept ` +
+        `sampling parameters — ignoring ${resolved.dropped.join(", ")}. ` +
+        `Set supportsSamplingParams: true to override.`;
+      if (wasExplicit) {
+        this.logger.warn(message);
+      } else {
+        this.logger.debug(message);
+      }
+    }
+
+    return resolved.params;
+  }
+
+  /**
    * Generate hash from toolsConfig for cache key
    * Uses MD5 hash to create short, unique identifier
    */
@@ -127,10 +170,15 @@ export class ModelInitializer implements IModelInitializer {
     );
     // Inline MCP servers change the bound tool set — keep cache correct.
     // Absent → key is unchanged from before (existing agents unaffected).
-    if (config.mcpServers && config.mcpServers.length > 0) {
-      return `${base}:mcp:${JSON.stringify(config.mcpServers)}`;
-    }
-    return base;
+    const withMcp =
+      config.mcpServers && config.mcpServers.length > 0
+        ? `${base}:mcp:${JSON.stringify(config.mcpServers)}`
+        : base;
+    // Same model + temperature but a different sampling-params override yields
+    // a differently-configured instance — must not share a cache entry.
+    return config.supportsSamplingParams === undefined
+      ? withMcp
+      : `${withMcp}:sp:${config.supportsSamplingParams}`;
   }
 
   // Chat model creators
@@ -172,7 +220,11 @@ export class ModelInitializer implements IModelInitializer {
       const routerURL = resolveRouterURL(baseURL);
       return new ChatAnthropic({
         modelName,
-        temperature: defaultTemperature,
+        // Claude Opus 4.7+ / Claude 5 reject `temperature` outright — the key
+        // must be absent, not `undefined`.
+        ...(defaultTemperature !== undefined && {
+          temperature: defaultTemperature,
+        }),
         maxTokens: defaultMaxTokens,
         anthropicApiKey:
           apiToken || this.resolveApiKey(ModelProvider.ANTHROPIC),
@@ -195,7 +247,9 @@ export class ModelInitializer implements IModelInitializer {
       return routerURL
         ? new ChatCohere({
             model: modelName,
-            temperature: defaultTemperature,
+            ...(defaultTemperature !== undefined && {
+              temperature: defaultTemperature,
+            }),
             client: new CohereClient({
               token,
               baseUrl: routerURL,
@@ -206,7 +260,9 @@ export class ModelInitializer implements IModelInitializer {
           })
         : new ChatCohere({
             model: modelName,
-            temperature: defaultTemperature,
+            ...(defaultTemperature !== undefined && {
+              temperature: defaultTemperature,
+            }),
             apiKey: token,
           });
     },
@@ -221,7 +277,9 @@ export class ModelInitializer implements IModelInitializer {
       const routerURL = resolveRouterURL(baseURL);
       return new ChatMistralAI({
         model: modelName,
-        temperature: defaultTemperature,
+        ...(defaultTemperature !== undefined && {
+          temperature: defaultTemperature,
+        }),
         maxTokens: defaultMaxTokens,
         apiKey: apiToken || this.resolveApiKey(ModelProvider.MISTRAL),
         ...(routerURL && {
@@ -334,13 +392,17 @@ export class ModelInitializer implements IModelInitializer {
   ): Promise<ChatModelOrRunnable> {
     const toolsConfig = normalizeToolConfigs(config.tools);
     const modelIdentifier = `${config.provider}:${config.modelName}`;
-    const cacheKey = generateModelCacheKeyPure(
+    const baseCacheKey = generateModelCacheKeyPure(
       modelIdentifier,
       config.temperature,
       config.maxTokens,
       toolsConfig,
       config.baseURL
     );
+    const cacheKey =
+      config.supportsSamplingParams === undefined
+        ? baseCacheKey
+        : `${baseCacheKey}:sp:${config.supportsSamplingParams}`;
 
     const cached = this.modelInstanceCache.get(cacheKey);
     if (cached) {
@@ -356,19 +418,30 @@ export class ModelInitializer implements IModelInitializer {
     }
 
     const apiToken = this.resolveApiKey(provider);
-    const temperature = config.temperature ?? 0.7;
-    const maxTokens = config.maxTokens ?? 4096;
+    const maxTokens = toOptionalNumber(config.maxTokens) ?? 4096;
+
+    // Claude Opus 4.7+ / Claude 5 reject sampling params — drop them instead of
+    // letting the request fail with "`temperature` is deprecated for this model".
+    // (`config.topP` is not forwarded to any provider today, so only the
+    // temperature needs resolving here.)
+    const sampling = this.resolveSampling(
+      [config.modelName],
+      { temperature: toOptionalNumber(config.temperature) ?? 0.7 },
+      config.supportsSamplingParams,
+      config.temperature !== undefined
+    );
 
     const modelConfig: ModelConfigWithTokenAndType = {
       modelId: modelIdentifier,
       modelName: config.modelName,
       provider,
       modelType: ModelType.CHAT,
-      defaultTemperature: Number(temperature),
-      defaultMaxTokens: Number(maxTokens),
+      defaultTemperature: sampling.temperature,
+      defaultMaxTokens: maxTokens,
       apiToken,
       requiresApiKey: true,
       baseURL: config.baseURL,
+      supportsSamplingParams: config.supportsSamplingParams,
     };
 
     this.logger.debug(
@@ -424,14 +497,28 @@ export class ModelInitializer implements IModelInitializer {
       );
     }
 
+    // Absent temperature/maxTokens must stay absent — `Number(undefined)` is
+    // `NaN`, which providers reject or silently reinterpret.
+    const requestedTemperature =
+      toOptionalNumber(config.temperature) ??
+      toOptionalNumber(modelConfig.defaultTemperature);
+
+    // Claude Opus 4.7+ / Claude 5 reject sampling params. Check every name the
+    // model is known by: the catalog name and the Bedrock model id can differ
+    // (`claude-opus-4-7` vs `us.anthropic.claude-opus-4-7-...`).
+    const sampling = this.resolveSampling(
+      [modelConfig.modelName, modelConfig.bedrockModelId],
+      { temperature: requestedTemperature },
+      config.supportsSamplingParams ?? modelConfig.supportsSamplingParams,
+      config.temperature !== undefined
+    );
+
     const finalConfig: ModelConfigWithTokenAndType = {
       ...modelConfig,
-      defaultTemperature: Number(
-        config.temperature ?? modelConfig.defaultTemperature
-      ),
-      defaultMaxTokens: Number(
-        config.maxTokens ?? modelConfig.defaultMaxTokens
-      ),
+      defaultTemperature: sampling.temperature,
+      defaultMaxTokens:
+        toOptionalNumber(config.maxTokens) ??
+        toOptionalNumber(modelConfig.defaultMaxTokens),
       baseURL: config.baseURL ?? modelConfig.baseURL,
     };
 
@@ -439,10 +526,17 @@ export class ModelInitializer implements IModelInitializer {
 
     let model: BaseChatModel;
     if (finalConfig.useBedrock && finalConfig.bedrockModelId) {
-      model = new ChatBedrockConverse({
+      // FlutchChatBedrockConverse, not ChatBedrockConverse: it strips reasoning
+      // blocks that the Converse request schema cannot represent (Claude Opus 5
+      // returns signature-only "thinking"), which otherwise rejects every
+      // multi-step tool call. No-op for models that don't emit such blocks.
+      model = new FlutchChatBedrockConverse({
         model: finalConfig.bedrockModelId,
         region: this.resolveBedrockRegion(),
-        temperature: finalConfig.defaultTemperature,
+        // Key omitted (not `undefined`) for models that reject sampling params.
+        ...(finalConfig.defaultTemperature !== undefined && {
+          temperature: finalConfig.defaultTemperature,
+        }),
         maxTokens: finalConfig.defaultMaxTokens,
         streaming: true,
       }) as unknown as BaseChatModel;
