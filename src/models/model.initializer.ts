@@ -18,8 +18,11 @@ import {
   resolveRouterURL,
   normalizeToolConfigs,
   resolveSamplingParams,
+  resolvePromptCacheControl,
+  buildEffortRequestFields,
   toOptionalNumber,
 } from "./model.logic";
+import type { PromptCacheControl } from "./model.logic";
 import {
   flutchFetch,
   flutchMistralHook,
@@ -176,9 +179,21 @@ export class ModelInitializer implements IModelInitializer {
         : base;
     // Same model + temperature but a different sampling-params override yields
     // a differently-configured instance — must not share a cache entry.
-    return config.supportsSamplingParams === undefined
-      ? withMcp
-      : `${withMcp}:sp:${config.supportsSamplingParams}`;
+    const withSampling =
+      config.supportsSamplingParams === undefined
+        ? withMcp
+        : `${withMcp}:sp:${config.supportsSamplingParams}`;
+    // Prompt-cache overrides change the bound call options the same way.
+    // Absent → key is unchanged from before (existing agents unaffected).
+    const withCache =
+      config.promptCache === undefined && config.promptCacheTtl === undefined
+        ? withSampling
+        : `${withSampling}:pc:${config.promptCache ?? "auto"}:${config.promptCacheTtl ?? "default"}`;
+    // Effort changes the constructed model, and on Bedrock it also changes the
+    // prompt-cache key — two efforts must never share one instance.
+    return config.effort === undefined
+      ? withCache
+      : `${withCache}:eff:${config.effort}`;
   }
 
   // Chat model creators
@@ -530,6 +545,13 @@ export class ModelInitializer implements IModelInitializer {
       // blocks that the Converse request schema cannot represent (Claude Opus 5
       // returns signature-only "thinking"), which otherwise rejects every
       // multi-step tool call. No-op for models that don't emit such blocks.
+      // Reasoning effort travels as a provider-specific request field. Key
+      // omitted entirely when unset, so the request is byte-identical to what
+      // it was before — which also keeps the prompt cache warm.
+      const effortFields = buildEffortRequestFields(
+        config.effort ?? modelConfig.defaultEffort
+      );
+
       model = new FlutchChatBedrockConverse({
         model: finalConfig.bedrockModelId,
         region: this.resolveBedrockRegion(),
@@ -537,6 +559,7 @@ export class ModelInitializer implements IModelInitializer {
         ...(finalConfig.defaultTemperature !== undefined && {
           temperature: finalConfig.defaultTemperature,
         }),
+        ...(effortFields && { additionalModelRequestFields: effortFields }),
         maxTokens: finalConfig.defaultMaxTokens,
         streaming: true,
       }) as unknown as BaseChatModel;
@@ -555,6 +578,24 @@ export class ModelInitializer implements IModelInitializer {
       modelId: config.modelId,
     };
 
+    // Bedrock prompt caching. Only the Converse path takes `cache_control`, so
+    // the option is resolved (and bound) exclusively for Bedrock models — every
+    // other provider keeps the exact call options it had before.
+    const promptCacheControl =
+      finalConfig.useBedrock && finalConfig.bedrockModelId
+        ? resolvePromptCacheControl(
+            [finalConfig.bedrockModelId, finalConfig.modelName],
+            config.promptCache ?? modelConfig.promptCache,
+            config.promptCacheTtl ?? modelConfig.promptCacheTtl
+          )
+        : undefined;
+
+    if (promptCacheControl) {
+      this.logger.debug(
+        `Prompt caching enabled for ${finalConfig.bedrockModelId} (ttl=${promptCacheControl.ttl})`
+      );
+    }
+
     if (
       config.toolsConfig ||
       config.customTools ||
@@ -565,7 +606,8 @@ export class ModelInitializer implements IModelInitializer {
         config.toolsConfig,
         config.customTools,
         config.mcpServers,
-        config.mcpContext
+        config.mcpContext,
+        promptCacheControl
       );
       this.modelInstanceCache.set(cacheKey, boundModel);
       return boundModel;
@@ -580,6 +622,13 @@ export class ModelInitializer implements IModelInitializer {
    * For toolsConfig: fetch tool executors from MCP Runtime
    * For customTools: use as-is (already prepared DynamicStructuredTool)
    *
+   * `promptCacheControl` is bound alongside the tools as a default call option:
+   * `ChatBedrockConverse` reads `cache_control` per call and turns it into
+   * `cachePoint` blocks after the tool schemas, the system prompt and the last
+   * message. Tool schemas dominate the request, so this is the one place worth
+   * caching — a model with no tools keeps its plain `BaseChatModel` type and no
+   * cache points (callers there rely on `withStructuredOutput` and friends).
+   *
    * Returns:
    * - Runnable when tools are bound (model.bindTools returns Runnable)
    * - BaseChatModel when no tools
@@ -589,7 +638,8 @@ export class ModelInitializer implements IModelInitializer {
     toolsConfig?: IAgentToolConfig[],
     customTools?: DynamicStructuredTool[],
     mcpServers?: Record<string, any>[],
-    mcpContext?: Record<string, any>
+    mcpContext?: Record<string, any>,
+    promptCacheControl?: PromptCacheControl
   ): Promise<
     | BaseChatModel
     | Runnable<BaseLanguageModelInput, AIMessageChunk, BaseChatModelCallOptions>
@@ -639,8 +689,18 @@ export class ModelInitializer implements IModelInitializer {
     if (allTools.length > 0) {
       this.logger.debug(`Binding ${allTools.length} tools to model`);
 
-      // bindTools returns Runnable, not BaseChatModel
-      const modelWithTools = model.bindTools(allTools);
+      // bindTools returns Runnable, not BaseChatModel. Its second argument is
+      // merged into the bound call options, which is how `cache_control`
+      // reaches ChatBedrockConverse.
+      // `cache_control` is a ChatBedrockConverse-specific call option, so it is
+      // not part of the base call-options type the generic `bindTools` takes.
+      const boundOptions: Partial<BaseChatModelCallOptions> & {
+        cache_control?: PromptCacheControl;
+      } = { cache_control: promptCacheControl };
+
+      const modelWithTools = promptCacheControl
+        ? model.bindTools(allTools, boundOptions)
+        : model.bindTools(allTools);
       return modelWithTools;
     }
 

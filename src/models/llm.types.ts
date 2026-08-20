@@ -8,6 +8,7 @@ import { IAgentToolConfig } from "../tools";
 import { Runnable } from "@langchain/core/runnables";
 import { BaseLanguageModelInput } from "@langchain/core/language_models/base";
 import { AIMessageChunk } from "@langchain/core/messages";
+import { PromptCacheTtl, ReasoningEffort } from "./model.logic";
 
 // ── New: direct model initialization by provider + name ──
 
@@ -65,6 +66,20 @@ export interface ModelByIdConfig {
   mcpServers?: Record<string, any>[];
   /** Optional: context (companyId/agentId) for resolving inline server creds. */
   mcpContext?: Record<string, any>;
+  /**
+   * Override Bedrock prompt caching for this call.
+   * `true` — send cache points even if the SDK does not recognise the model.
+   * `false` — never send them.
+   * Absent — decided from the model identifier (see `modelSupportsPromptCache`).
+   */
+  promptCache?: boolean;
+  /** TTL of the cache checkpoints. Defaults to Bedrock's 5 minutes. */
+  promptCacheTtl?: PromptCacheTtl;
+  /**
+   * Reasoning effort for this call (Bedrock Converse `output_config.effort`).
+   * Absent — the model's own default (`high` on Claude Opus 5).
+   */
+  effort?: ReasoningEffort;
 }
 
 // Simple fetcher function type - only modelId parameter
@@ -94,6 +109,16 @@ export interface ModelConfigWithToken {
   // Bedrock routing
   useBedrock?: boolean;
   bedrockModelId?: string;
+  /**
+   * Optional capability flag from the model catalog. Overrides the SDK's
+   * identifier-based detection of Bedrock prompt-cache support.
+   * See `ModelByIdConfig.promptCache`.
+   */
+  promptCache?: boolean;
+  /** Optional catalog default for the cache checkpoint TTL. */
+  promptCacheTtl?: PromptCacheTtl;
+  /** Optional catalog default for the reasoning effort. */
+  defaultEffort?: ReasoningEffort;
   /** Optional custom base URL for the LLM provider (e.g. self-hosted gateway). Falls back to FLUTCH_ROUTER_URL env or https://router.flutch.ai */
   baseURL?: string;
 }
