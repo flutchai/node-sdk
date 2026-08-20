@@ -14,6 +14,7 @@ import {
   ModelConfig,
   ModelConfigWithToken,
 } from "./llm.types";
+import type { PromptCacheControl } from "./model.logic";
 
 // Chat model with tools bound returns Runnable, not BaseChatModel
 export type ChatModelWithTools = Runnable<
@@ -80,7 +81,12 @@ export interface IModelInitializer {
 
 // Types for creating different model types
 export type ChatModelCreator = (
-  config: ModelConfigWithTokenAndType
+  config: ModelConfigWithTokenAndType,
+  /**
+   * Resolved prompt-cache settings, or `undefined` when the model does not
+   * support caching. Only providers that can express it act on it.
+   */
+  promptCacheControl?: PromptCacheControl
 ) => BaseChatModel;
 export type RerankModelCreator = (
   config: ModelConfigWithTokenAndType

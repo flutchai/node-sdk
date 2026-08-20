@@ -164,8 +164,16 @@ export const PROMPT_CACHE_MIN_VERSIONS: Record<
 /** TTL of a Bedrock cache checkpoint. Claude models accept both values. */
 export type PromptCacheTtl = "5m" | "1h";
 
-/** What `ChatBedrockConverse` expects in its `cache_control` call option. */
+/**
+ * Cache-control payload, shaped to satisfy both providers at once:
+ * `ChatBedrockConverse.cache_control` (call option, `type` optional) and
+ * `ChatAnthropic.cache_control` (constructor field, `type` required). The
+ * Anthropic form is the top-level parameter, which puts a breakpoint on the
+ * last cacheable block and advances it as the conversation grows — verified
+ * against Bedrock's InvokeModel body schema, which accepts it.
+ */
 export interface PromptCacheControl {
+  type: "ephemeral";
   ttl?: PromptCacheTtl;
 }
 
@@ -196,7 +204,7 @@ export function modelSupportsPromptCache(modelIdentifier?: string): boolean {
 }
 
 /**
- * Decide whether to send cache points with a request, and with which TTL.
+ * Decide whether to cache the request prefix, and with which TTL.
  *
  * `modelIdentifiers` accepts every name the model is known by (catalog model
  * name, Bedrock model id, …) — caching is enabled when *any* of them is a
@@ -217,7 +225,7 @@ export function resolvePromptCacheControl(
   const enabled =
     promptCache ?? modelIdentifiers.some(id => modelSupportsPromptCache(id));
 
-  return enabled ? { ttl: ttl ?? "5m" } : undefined;
+  return enabled ? { type: "ephemeral", ttl: ttl ?? "5m" } : undefined;
 }
 
 /**

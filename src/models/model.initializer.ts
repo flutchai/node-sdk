@@ -225,13 +225,10 @@ export class ModelInitializer implements IModelInitializer {
       return new ChatOpenAI(config);
     },
 
-    [ModelProvider.ANTHROPIC]: ({
-      modelName,
-      defaultTemperature,
-      defaultMaxTokens,
-      apiToken,
-      baseURL,
-    }) => {
+    [ModelProvider.ANTHROPIC]: (
+      { modelName, defaultTemperature, defaultMaxTokens, apiToken, baseURL },
+      promptCacheControl
+    ) => {
       const routerURL = resolveRouterURL(baseURL);
       return new ChatAnthropic({
         modelName,
@@ -241,6 +238,11 @@ export class ModelInitializer implements IModelInitializer {
           temperature: defaultTemperature,
         }),
         maxTokens: defaultMaxTokens,
+        // Top-level prompt caching: one breakpoint on the last cacheable block,
+        // advanced automatically as the conversation grows. Survives the router
+        // (which forwards the Anthropic body untouched) and is accepted by
+        // Bedrock's InvokeModel schema behind it.
+        ...(promptCacheControl && { cache_control: promptCacheControl }),
         anthropicApiKey:
           apiToken || this.resolveApiKey(ModelProvider.ANTHROPIC),
         ...(routerURL && {
@@ -537,6 +539,23 @@ export class ModelInitializer implements IModelInitializer {
       baseURL: config.baseURL ?? modelConfig.baseURL,
     };
 
+    // Prompt caching. Resolved once from every name the model is known by, and
+    // applied by whichever path can express it: the Bedrock branch binds it as
+    // a Converse call option, the Anthropic branch (which goes through the
+    // router) sets the top-level parameter. Providers that cannot cache never
+    // see a value, because the resolver only recognises Claude models.
+    const promptCacheControl = resolvePromptCacheControl(
+      [finalConfig.bedrockModelId, finalConfig.modelName],
+      config.promptCache ?? modelConfig.promptCache,
+      config.promptCacheTtl ?? modelConfig.promptCacheTtl
+    );
+
+    if (promptCacheControl) {
+      this.logger.debug(
+        `Prompt caching enabled for ${finalConfig.bedrockModelId ?? finalConfig.modelName} (ttl=${promptCacheControl.ttl})`
+      );
+    }
+
     this.logger.debug(`Creating new chat model instance: ${cacheKey}`);
 
     let model: BaseChatModel;
@@ -570,31 +589,13 @@ export class ModelInitializer implements IModelInitializer {
           `Chat models not supported for provider: ${modelConfig.provider}`
         );
       }
-      model = creator(finalConfig);
+      model = creator(finalConfig, promptCacheControl);
     }
 
     model.metadata = {
       ...model.metadata,
       modelId: config.modelId,
     };
-
-    // Bedrock prompt caching. Only the Converse path takes `cache_control`, so
-    // the option is resolved (and bound) exclusively for Bedrock models — every
-    // other provider keeps the exact call options it had before.
-    const promptCacheControl =
-      finalConfig.useBedrock && finalConfig.bedrockModelId
-        ? resolvePromptCacheControl(
-            [finalConfig.bedrockModelId, finalConfig.modelName],
-            config.promptCache ?? modelConfig.promptCache,
-            config.promptCacheTtl ?? modelConfig.promptCacheTtl
-          )
-        : undefined;
-
-    if (promptCacheControl) {
-      this.logger.debug(
-        `Prompt caching enabled for ${finalConfig.bedrockModelId} (ttl=${promptCacheControl.ttl})`
-      );
-    }
 
     if (
       config.toolsConfig ||
@@ -607,7 +608,10 @@ export class ModelInitializer implements IModelInitializer {
         config.customTools,
         config.mcpServers,
         config.mcpContext,
-        promptCacheControl
+        // Converse takes cache control as a per-call option; the Anthropic
+        // client already got it as a constructor field, and handing it the
+        // same value twice would put an unknown key in its call options.
+        finalConfig.useBedrock ? promptCacheControl : undefined
       );
       this.modelInstanceCache.set(cacheKey, boundModel);
       return boundModel;
@@ -622,12 +626,14 @@ export class ModelInitializer implements IModelInitializer {
    * For toolsConfig: fetch tool executors from MCP Runtime
    * For customTools: use as-is (already prepared DynamicStructuredTool)
    *
-   * `promptCacheControl` is bound alongside the tools as a default call option:
-   * `ChatBedrockConverse` reads `cache_control` per call and turns it into
-   * `cachePoint` blocks after the tool schemas, the system prompt and the last
-   * message. Tool schemas dominate the request, so this is the one place worth
-   * caching — a model with no tools keeps its plain `BaseChatModel` type and no
-   * cache points (callers there rely on `withStructuredOutput` and friends).
+   * `promptCacheControl` is the **Bedrock-only** half of prompt caching: it is
+   * bound alongside the tools as a default call option, and `ChatBedrockConverse`
+   * turns it into `cachePoint` blocks after the tool schemas, the system prompt
+   * and the last message. Tool schemas dominate the request, so this is the one
+   * place worth caching — a model with no tools keeps its plain `BaseChatModel`
+   * type and no cache points (callers there rely on `withStructuredOutput` and
+   * friends). The Anthropic client takes its cache settings in the constructor
+   * instead and must not be handed them again here.
    *
    * Returns:
    * - Runnable when tools are bound (model.bindTools returns Runnable)

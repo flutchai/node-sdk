@@ -77,6 +77,7 @@ jest.mock("../tools/mcp-tool-filter", () => ({
 }));
 
 import { ChatBedrockConverse } from "@langchain/aws";
+import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOpenAI } from "@langchain/openai";
 import { ModelInitializer } from "../models/model.initializer";
 import { ModelProvider, ModelType } from "../models/enums";
@@ -153,19 +154,19 @@ describe("resolvePromptCacheControl", () => {
   it("defaults to a 5-minute TTL for a supported model", () => {
     expect(
       resolvePromptCacheControl(["us.anthropic.claude-opus-5", "claude-opus-5"])
-    ).toEqual({ ttl: "5m" });
+    ).toEqual({ type: "ephemeral", ttl: "5m" });
   });
 
   it("honours an explicit TTL", () => {
     expect(
       resolvePromptCacheControl(["us.anthropic.claude-opus-5"], undefined, "1h")
-    ).toEqual({ ttl: "1h" });
+    ).toEqual({ type: "ephemeral", ttl: "1h" });
   });
 
   it("enables caching when ANY identifier is a supported model", () => {
     expect(
       resolvePromptCacheControl(["some-internal-alias", "claude-opus-5"])
-    ).toEqual({ ttl: "5m" });
+    ).toEqual({ type: "ephemeral", ttl: "5m" });
   });
 
   it("returns undefined for an unsupported model", () => {
@@ -174,6 +175,7 @@ describe("resolvePromptCacheControl", () => {
 
   it("lets the config force caching on for an unknown model", () => {
     expect(resolvePromptCacheControl(["future-model"], true)).toEqual({
+      type: "ephemeral",
       ttl: "5m",
     });
   });
@@ -207,7 +209,9 @@ describe("prompt caching in ModelInitializer", () => {
     expect(bindTools).toHaveBeenCalledTimes(1);
     const [tools, options] = bindTools.mock.calls[0];
     expect(tools).toEqual([{ name: "list_sites" }]);
-    expect(options).toEqual({ cache_control: { ttl: "5m" } });
+    expect(options).toEqual({
+      cache_control: { type: "ephemeral", ttl: "5m" },
+    });
   });
 
   it("passes the catalog's TTL through", async () => {
@@ -219,7 +223,9 @@ describe("prompt caching in ModelInitializer", () => {
     });
 
     const [, options] = lastBindTools(bedrockMock).mock.calls[0];
-    expect(options).toEqual({ cache_control: { ttl: "1h" } });
+    expect(options).toEqual({
+      cache_control: { type: "ephemeral", ttl: "1h" },
+    });
   });
 
   it("lets the call override the catalog's TTL", async () => {
@@ -232,7 +238,9 @@ describe("prompt caching in ModelInitializer", () => {
     });
 
     const [, options] = lastBindTools(bedrockMock).mock.calls[0];
-    expect(options).toEqual({ cache_control: { ttl: "5m" } });
+    expect(options).toEqual({
+      cache_control: { type: "ephemeral", ttl: "5m" },
+    });
   });
 
   it("binds no call options when the call disables caching", async () => {
@@ -383,5 +391,75 @@ describe("reasoning effort in ModelInitializer", () => {
     });
 
     expect(bedrockMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("prompt caching on the router (Anthropic) path", () => {
+  let initializer: ModelInitializer;
+  let mockFetcher: jest.Mock;
+
+  const anthropicMock = ChatAnthropic as unknown as jest.Mock;
+
+  const routerConfig = (
+    overrides?: Partial<ModelConfigWithTokenAndType>
+  ): ModelConfigWithTokenAndType => ({
+    modelId: "model-router",
+    modelName: "claude-opus-5",
+    provider: ModelProvider.ANTHROPIC,
+    modelType: ModelType.CHAT,
+    defaultMaxTokens: 8192,
+    requiresApiKey: true,
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockFetcher = jest.fn();
+    initializer = new ModelInitializer(mockFetcher);
+  });
+
+  it("sets the top-level cache_control on the client", async () => {
+    mockFetcher.mockResolvedValue(routerConfig());
+
+    await initializer.initializeChatModel({ modelId: "model-router" });
+
+    expect(lastCallConfig(anthropicMock).cache_control).toEqual({
+      type: "ephemeral",
+      ttl: "5m",
+    });
+  });
+
+  it("never binds the Converse call option on this path", async () => {
+    mockFetcher.mockResolvedValue(routerConfig());
+
+    await initializer.initializeChatModel({
+      modelId: "model-router",
+      toolsConfig: TOOLS,
+    });
+
+    // ChatAnthropic takes cache settings in the constructor; repeating them as
+    // a bound call option would put an unknown key in its call options.
+    expect(lastBindTools(anthropicMock).mock.calls[0]).toHaveLength(1);
+  });
+
+  it("omits cache_control for a model that cannot cache", async () => {
+    mockFetcher.mockResolvedValue(
+      routerConfig({ modelName: "claude-3-5-sonnet-20241022" })
+    );
+
+    await initializer.initializeChatModel({ modelId: "model-router" });
+
+    expect(lastCallConfig(anthropicMock)).not.toHaveProperty("cache_control");
+  });
+
+  it("omits cache_control when the call disables caching", async () => {
+    mockFetcher.mockResolvedValue(routerConfig());
+
+    await initializer.initializeChatModel({
+      modelId: "model-router",
+      promptCache: false,
+    });
+
+    expect(lastCallConfig(anthropicMock)).not.toHaveProperty("cache_control");
   });
 });
