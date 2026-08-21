@@ -126,6 +126,140 @@ export function modelAcceptsSamplingParams(modelIdentifier?: string): boolean {
   return !atOrAboveThreshold;
 }
 
+/**
+ * Bedrock prompt caching (Converse `cachePoint`) — first Claude version per
+ * family that supports it.
+ *
+ * A cache point marks the end of a static prompt prefix. Bedrock chains the
+ * three cacheable sections in the order `tools` → `system` → `messages`, so a
+ * checkpoint after the tool schemas is re-read by every request that binds the
+ * same tools — across tenants and across the steps of one agentic turn. Reads
+ * are billed at 10% of the input rate, writes at 1.25x, and the entry's TTL
+ * resets on every hit.
+ *
+ * Measured on the zetap console assistant (65 tools, us.anthropic.claude-opus-5,
+ * us-east-2): the tools block alone is 24 575 tokens and the system prompt
+ * another 5 040, i.e. ~29.6k input tokens re-sent on EVERY LLM call of every
+ * turn. Caching turns that into ~2 960 billable tokens per call.
+ *
+ * Thresholds (family → first version that supports `cachePoint`):
+ *   opus    → 4.0
+ *   sonnet  → 4.0
+ *   haiku   → 4.5
+ *
+ * Below the threshold, on legacy naming (`claude-3-5-sonnet-*`) and on every
+ * non-Claude Bedrock model the answer is "no": an unsupported model rejects a
+ * `cachePoint` block outright, so the conservative default is to send none.
+ * `promptCache: true` forces it on for a model the SDK does not recognise yet.
+ */
+export const PROMPT_CACHE_MIN_VERSIONS: Record<
+  string,
+  { major: number; minor: number }
+> = {
+  opus: { major: 4, minor: 0 },
+  sonnet: { major: 4, minor: 0 },
+  haiku: { major: 4, minor: 5 },
+};
+
+/** TTL of a Bedrock cache checkpoint. Claude models accept both values. */
+export type PromptCacheTtl = "5m" | "1h";
+
+/**
+ * Cache-control payload, shaped to satisfy both providers at once:
+ * `ChatBedrockConverse.cache_control` (call option, `type` optional) and
+ * `ChatAnthropic.cache_control` (constructor field, `type` required). The
+ * Anthropic form is the top-level parameter, which puts a breakpoint on the
+ * last cacheable block and advances it as the conversation grows — verified
+ * against Bedrock's InvokeModel body schema, which accepts it.
+ */
+export interface PromptCacheControl {
+  type: "ephemeral";
+  ttl?: PromptCacheTtl;
+}
+
+/**
+ * Does this model support Bedrock prompt caching?
+ *
+ * Returns `false` for anything the SDK does not explicitly know to support it,
+ * which is the safe direction: a missing cache point costs money, an unsupported
+ * one fails the request.
+ */
+export function modelSupportsPromptCache(modelIdentifier?: string): boolean {
+  if (!modelIdentifier) return false;
+
+  const match = CLAUDE_FAMILY_VERSION.exec(modelIdentifier.toLowerCase());
+  if (!match) return false;
+
+  const [, family, majorRaw, minorRaw] = match;
+  const threshold = PROMPT_CACHE_MIN_VERSIONS[family];
+  if (!threshold) return false;
+
+  const major = Number(majorRaw);
+  const minor = minorRaw === undefined ? 0 : Number(minorRaw);
+
+  return (
+    major > threshold.major ||
+    (major === threshold.major && minor >= threshold.minor)
+  );
+}
+
+/**
+ * Decide whether to cache the request prefix, and with which TTL.
+ *
+ * `modelIdentifiers` accepts every name the model is known by (catalog model
+ * name, Bedrock model id, …) — caching is enabled when *any* of them is a
+ * known-supporting model.
+ *
+ * `promptCache` is the config-level escape hatch and always wins:
+ *   - `true`  → cache even if the identifier is unknown to the SDK
+ *   - `false` → never cache
+ *   - absent  → decide from the model identifier
+ *
+ * Returns `undefined` when no cache points should be sent.
+ */
+export function resolvePromptCacheControl(
+  modelIdentifiers: (string | undefined)[],
+  promptCache?: boolean,
+  ttl?: PromptCacheTtl
+): PromptCacheControl | undefined {
+  const enabled =
+    promptCache ?? modelIdentifiers.some(id => modelSupportsPromptCache(id));
+
+  return enabled ? { type: "ephemeral", ttl: ttl ?? "5m" } : undefined;
+}
+
+/**
+ * Reasoning-effort levels accepted by `output_config.effort`.
+ *
+ * Effort controls how much the model thinks before answering, and thinking
+ * tokens are billed as output. Measured on Bedrock (us.anthropic.claude-opus-5,
+ * one analytical question, 4096 max tokens): `high` — the default — produced
+ * 2 398 output tokens, `xhigh` 1 884, `medium` 1 205, `low` 1 191.
+ *
+ * Two operational notes before turning this into a per-turn router:
+ *   - effort is part of the Bedrock prompt-cache key, so alternating levels on
+ *     one agent re-writes the cached prefix on every switch;
+ *   - lower effort means shallower multi-step tool work, which is exactly what
+ *     the console assistant does. Pick one level per agent and A/B it.
+ */
+export type ReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
+/**
+ * Build the `additionalModelRequestFields` payload that carries the effort
+ * level through the Converse API, or `undefined` when no effort is configured.
+ *
+ * Only sent when explicitly asked for: the catalog default stays "whatever the
+ * model does on its own" (`high` for Claude Opus 5), so no existing agent
+ * changes behaviour. Models that do not accept `output_config` reject the
+ * request rather than silently ignoring it — deliberate, because a silently
+ * dropped effort reads as a saving that never happened.
+ */
+export function buildEffortRequestFields(
+  effort?: ReasoningEffort
+): { output_config: { effort: ReasoningEffort } } | undefined {
+  return effort ? { output_config: { effort } } : undefined;
+}
+
 export interface SamplingParams {
   temperature?: number;
   topP?: number;

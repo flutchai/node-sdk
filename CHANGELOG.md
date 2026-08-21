@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-08-20
+
+### Added
+
+- **Bedrock prompt caching, on by default for Claude models.** Nothing in the SDK ever asked Bedrock to cache anything, so every LLM call re-paid full price for a prefix that never changes. Measured on the zetap console assistant (65 tools, `us.anthropic.claude-opus-5`, us-east-2): the tool schemas alone are **24 575 tokens** and the system prompt another **5 040** — **29 710 input tokens re-sent on every call of every turn**, including each step of a multi-tool answer. `ModelInitializer` now binds `cache_control` alongside the tools on the Bedrock branch, which makes `ChatBedrockConverse` emit `cachePoint` blocks after the tool schemas, the system prompt and the last message. Verified live through the same LangChain path:
+
+  | call                 | billable input | cache write | cache read |
+  | -------------------- | -------------- | ----------- | ---------- |
+  | before               | 29 710         | —           | —          |
+  | first call (cold)    | 2              | 29 708      | 0          |
+  | every following call | 2              | 0           | 29 708     |
+
+  Cache reads bill at 10% of the input rate and writes at 1.25x, so the break-even is the **second** call inside the TTL window — i.e. within a single multi-step turn. Bedrock chains the cacheable sections `tools` → `system` → `messages`, and the tool block is identical for every tenant on the same agent config, so one entry serves the whole fleet.
+
+- `models/model.logic` — `modelSupportsPromptCache`, `resolvePromptCacheControl`, `PROMPT_CACHE_MIN_VERSIONS`, `PromptCacheTtl`, `PromptCacheControl`. Support is decided from the model identifier by family + version (opus ≥ 4.0, sonnet ≥ 4.0, haiku ≥ 4.5), the same shape as the sampling-parameter thresholds. Anything the SDK does not recognise — legacy `claude-3-5-*` naming, Nova, DeepSeek, Qwen — gets **no** cache points: an unsupported model rejects the block outright, and a missing cache point only costs money.
+
+- **The same caching on the router path.** `ChatAnthropic` gets `cache_control` as a constructor field — the top-level parameter, which puts one breakpoint on the last cacheable block and advances it as the conversation grows. It survives the router (which forwards the Anthropic body untouched) and is accepted by Bedrock's `InvokeModel` schema behind it, verified live: a request through a locally run router reported `cache_read_input_tokens: 29 615`. This matters because Claude 5 traffic is moving back onto the router — direct Bedrock calls never reach `/internal/report-usage`, so they are never billed — and caching must not be lost in the move.
+
+- `promptCache` / `promptCacheTtl` on `ModelByIdConfig` (per call) and `ModelConfigWithToken` (catalog default). `promptCache: true` forces caching on for a model released after this SDK; `false` turns it off. TTL is `5m` (default) or `1h`.
+
+- **Reasoning effort** — `effort` on `ModelByIdConfig`, `defaultEffort` in the catalog, plumbed to Converse as `additionalModelRequestFields.output_config.effort`. Thinking tokens bill as output ($25/MTok on Opus 5), and effort is the knob for them. Indicative measurement on one analytical question (4096 max tokens): `high` (the default) 2 398 output tokens, `xhigh` 1 884, `medium` 1 205, `low` 1 191. **No default changed** — the field is omitted from the request entirely unless configured, so every existing agent keeps today's behaviour and today's cache entries.
+
+### Behaviour notes
+
+- The two providers take cache settings through different doors and must never be handed both: Converse reads a per-call option, the Anthropic client a constructor field.
+- Cache points are bound **only where tools are bound** (Bedrock path). A tool-less model keeps its plain `BaseChatModel` type, because callers there rely on `withStructuredOutput` and friends, which a `RunnableBinding` does not expose.
+- Non-Bedrock providers are untouched: `cache_control` is a `ChatBedrockConverse` call option and is never attached to OpenAI / Anthropic-direct / Mistral / Cohere models.
+- `effort` is part of Bedrock's prompt-cache key. Alternating levels on one agent re-writes the cached prefix on every switch — pick one level per agent rather than routing per turn.
+- Both overrides participate in the model instance cache key, so two configs never share one instance.
+
 ## [0.6.5] - 2026-08-04
 
 ### Fixed
