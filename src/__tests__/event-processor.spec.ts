@@ -1,6 +1,7 @@
 import {
   EventProcessor,
   StreamAccumulator,
+  joinTextSteps,
 } from "../engines/langgraph/event-processor.utils";
 import { StreamChannel } from "../messages";
 
@@ -1146,6 +1147,35 @@ describe("EventProcessor", () => {
       expect(result.content.text).toBe("Hello world");
     });
 
+    it("should separate text steps split by a tool call", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([{ type: "text", text: "Here's your checkout." }])
+      );
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          {
+            type: "tool_use",
+            id: "toolu_1",
+            name: "create_static_button",
+            input: "",
+          },
+        ])
+      );
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([{ type: "text", text: "Who would you bring?" }])
+      );
+
+      const result = processor.getResult(acc);
+      expect(result.content.text).toBe(
+        "Here's your checkout.\n\nWho would you bring?"
+      );
+    });
+
     it("should return empty text when no text blocks exist", () => {
       const acc = createAccumulator();
 
@@ -1571,5 +1601,15 @@ describe("EventProcessor", () => {
       expect(chain1!.steps).toHaveLength(1);
       expect(chain2!.steps).toHaveLength(1);
     });
+  });
+});
+
+describe("joinTextSteps", () => {
+  it("adds a paragraph break only at seams without whitespace", () => {
+    expect(joinTextSteps(["a.", "b"])).toBe("a.\n\nb");
+    expect(joinTextSteps(["a. ", "b"])).toBe("a. b");
+    expect(joinTextSteps(["a.", "\nb"])).toBe("a.\nb");
+    expect(joinTextSteps(["", "a", "", "b"])).toBe("a\n\nb");
+    expect(joinTextSteps([])).toBe("");
   });
 });

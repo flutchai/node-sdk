@@ -52,6 +52,22 @@ export interface StreamAccumulator {
 }
 
 /**
+ * Joins text fragments that were split by tool calls. Adjacent fragments are
+ * separated by a blank line unless one side of the seam is already whitespace;
+ * empty fragments are dropped so a tool call with no surrounding text adds
+ * nothing.
+ */
+export function joinTextSteps(parts: string[]): string {
+  let out = "";
+  for (const part of parts) {
+    if (!part) continue;
+    if (!out || /\s$/.test(out) || /^\s/.test(part)) out += part;
+    else out += "\n\n" + part;
+  }
+  return out;
+}
+
+/**
  * Stateless event processor for LangGraph streams
  * Thread-safe: state is passed via accumulator parameter, not stored in class
  */
@@ -675,13 +691,19 @@ export class EventProcessor {
           }
         : null;
 
-    // Extract text from text channel for backwards compatibility
+    // Extract text from text channel for backwards compatibility.
+    // Text steps are separated by tool calls: a model that writes a sentence,
+    // calls a tool and then keeps writing produces two steps. Gluing them with
+    // "" turned "…your checkout." + "Megacampus is…" into "checkout.Megacampus",
+    // so separate them with a paragraph break unless the seam already has
+    // whitespace.
     const textChain = allChains.find(c => c.channel === "text");
     const text = textChain
-      ? textChain.steps
-          .filter(step => step.type === "text")
-          .map(step => step.text || "")
-          .join("")
+      ? joinTextSteps(
+          textChain.steps
+            .filter(step => step.type === "text")
+            .map(step => step.text || "")
+        )
       : "";
 
     this.logger.log("📊 [EventProcessor] Final result assembled", {
