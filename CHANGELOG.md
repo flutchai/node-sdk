@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-09-15
+
+### Fixed
+
+- **Text split by a tool call no longer runs together.** `EventProcessor.getResult` joined the text steps of a reply with `""`, so a model that wrote a sentence, called a tool and kept writing produced `"…your checkout.Megacampus is…"` in `content.text` — the field every channel delivers. Text steps are now joined by `joinTextSteps`: a blank line at a seam that has no whitespace on either side, nothing added where there already is some, empty steps skipped.
+
 ## [0.6.6] - 2026-08-20
 
 ### Added
