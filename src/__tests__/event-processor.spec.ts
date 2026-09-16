@@ -1612,4 +1612,25 @@ describe("joinTextSteps", () => {
     expect(joinTextSteps(["", "a", "", "b"])).toBe("a\n\nb");
     expect(joinTextSteps([])).toBe("");
   });
+
+  it("keeps only the later wording of a paragraph repeated around a tool call", () => {
+    const before =
+      "Для мебельного бизнеса главное — новые клиенты.\n\nВозьмите Business за $350 — бизнес-зона и афтепати дадут доступ к тем самым 13,000 предпринимателям, а один найденный клиент окупит билет. Оформить сейчас?";
+    const after =
+      "Возьмите Business за $350 — бизнес-зона и афтепати дадут доступ к 13,000 предпринимателям из 102 стран, а один найденный клиент окупит билет. Оформить сейчас?";
+    expect(joinTextSteps([before, after])).toBe(
+      "Для мебельного бизнеса главное — новые клиенты.\n\n" + after
+    );
+  });
+
+  it("leaves short and genuinely different paragraphs alone", () => {
+    expect(joinTextSteps(["Отлично!", "Отлично!"])).toBe(
+      "Отлично!\n\nОтлично!"
+    );
+    const a =
+      "Standard costs $150 and gives general seating for all four days of the Summit.";
+    const b =
+      "Business costs $350 and adds the Business zone, seat choice and the Afterparty.";
+    expect(joinTextSteps([a, b])).toBe(a + "\n\n" + b);
+  });
 });
