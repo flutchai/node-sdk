@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-10-20
+
+### Changed
+
+- **LangGraph upgraded: `@langchain/langgraph` 1.3.7 → 1.5.1, `@langchain/langgraph-checkpoint-mongodb` 1.3.3 → 1.5.0, `@langchain/langgraph-checkpoint-postgres` 1.0.2 → 1.1.0.** All three now resolve a single `@langchain/langgraph-checkpoint` 1.2.0 (the new minimum for 1.5). Verified on dev: a second turn in the same thread reads the first turn's checkpoint from MongoDB, and a graph parked on `interrupt()` resumes from its checkpoint with `Command({ resume })`. The 1.5 line adds a `task_path` to checkpoint writes so parallel writes replay in the same order as Python's langgraph; it only matters for graphs that use `DeltaChannel`, which the SDK does not.
+
+### Upgrade notes
+
+- **`PostgresSaver` users:** run `setup()` once, from a single process, before the new version serves traffic. It adds the `task_path` column; until it has run, reads and writes fail with `column "task_path" does not exist`. Several processes running `setup()` at the same time can fail with a duplicate key on `checkpoint_migrations`. The MongoDB saver needs no migration (new documents get a `task_path` field, old ones keep reading as before).
+- Threads interrupted mid-superstep with parallel nodes that already wrote to a `DeltaChannel` should be finished on the previous version before upgrading. A single interrupted node is safe to resume.
+
+### Fixed
+
+- **A paragraph repeated around a tool call is no longer delivered twice.** Models often write an answer, call a tool (a checkout button, say) and then write the same paragraph again in slightly different words. `joinTextSteps` now drops a paragraph of eight or more words that nearly repeats one from an earlier text step (Jaccard similarity ≥ 0.75 on lower-cased words), so the visitor reads it once, in its final wording, and collapses runs of blank lines left behind.
+
 ## [0.6.7] - 2026-09-15
 
 ### Fixed

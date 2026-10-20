@@ -56,15 +56,63 @@ export interface StreamAccumulator {
  * separated by a blank line unless one side of the seam is already whitespace;
  * empty fragments are dropped so a tool call with no surrounding text adds
  * nothing.
+ *
+ * Models often write their answer, call a tool (a checkout button, say) and
+ * then write the same paragraph again in slightly different words. A
+ * paragraph that nearly repeats one from an earlier fragment replaces it, so
+ * the visitor reads the answer once, in its final wording.
  */
 export function joinTextSteps(parts: string[]): string {
+  const kept = parts.filter(Boolean);
+  for (let i = 1; i < kept.length; i++) {
+    for (const paragraph of paragraphsOf(kept[i])) {
+      for (let j = 0; j < i; j++) {
+        kept[j] = removeNearDuplicate(kept[j], paragraph);
+      }
+    }
+  }
   let out = "";
-  for (const part of parts) {
-    if (!part) continue;
+  for (const part of kept) {
+    if (!part.trim()) continue;
     if (!out || /\s$/.test(out) || /^\s/.test(part)) out += part;
     else out += "\n\n" + part;
   }
-  return out;
+  return out.replace(/\n{3,}/g, "\n\n");
+}
+
+const MIN_DUPLICATE_WORDS = 8;
+const DUPLICATE_SIMILARITY = 0.75;
+
+function paragraphsOf(text: string): string[] {
+  return text
+    .split(/\n\s*\n/)
+    .map(p => p.trim())
+    .filter(Boolean);
+}
+
+function wordsOf(text: string): Set<string> {
+  return new Set(text.toLowerCase().match(/[\p{L}\p{N}$]+/gu) ?? []);
+}
+
+/** Share of common words (Jaccard) — robust to small rewordings. */
+function similarity(a: Set<string>, b: Set<string>): number {
+  let common = 0;
+  for (const w of a) if (b.has(w)) common++;
+  return common / (a.size + b.size - common);
+}
+
+function removeNearDuplicate(text: string, paragraph: string): string {
+  const target = wordsOf(paragraph);
+  if (target.size < MIN_DUPLICATE_WORDS) return text;
+  return paragraphsOf(text)
+    .filter(p => {
+      const words = wordsOf(p);
+      return (
+        words.size < MIN_DUPLICATE_WORDS ||
+        similarity(words, target) < DUPLICATE_SIMILARITY
+      );
+    })
+    .join("\n\n");
 }
 
 /**
