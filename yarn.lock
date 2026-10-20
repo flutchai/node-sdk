@@ -2133,9 +2133,9 @@ __metadata:
     "@langchain/aws": "npm:^1.3.9"
     "@langchain/cohere": "npm:^1.0.5"
     "@langchain/core": "npm:^1.1.48"
-    "@langchain/langgraph": "npm:^1.3.7"
-    "@langchain/langgraph-checkpoint-mongodb": "npm:1.3.3"
-    "@langchain/langgraph-checkpoint-postgres": "npm:^1.0.2"
+    "@langchain/langgraph": "npm:^1.5.1"
+    "@langchain/langgraph-checkpoint-mongodb": "npm:1.5.0"
+    "@langchain/langgraph-checkpoint-postgres": "npm:^1.1.0"
     "@langchain/mistralai": "npm:^1.1.0"
     "@langchain/openai": "npm:^1.4.7"
     "@nestjs/axios": "npm:^4.0.1"
@@ -2655,86 +2655,72 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@langchain/langgraph-checkpoint-mongodb@npm:1.3.3":
-  version: 1.3.3
-  resolution: "@langchain/langgraph-checkpoint-mongodb@npm:1.3.3"
+"@langchain/langgraph-checkpoint-mongodb@npm:1.5.0":
+  version: 1.5.0
+  resolution: "@langchain/langgraph-checkpoint-mongodb@npm:1.5.0"
   dependencies:
     mongodb: "npm:^6.21.0"
   peerDependencies:
     "@langchain/core": ^1.1.44
-    "@langchain/langgraph-checkpoint": ^1.0.0
-  checksum: 10c0/bdecfbe986a7d8cac50045abd27def043b4a3a380ec5aace6ba93f86fb4dd72cb5ce6ce12cfb0549af1da38dc00961cd54b211e9b25c4b109051285c148d3cb2
+    "@langchain/langgraph-checkpoint": ^1.2.0
+  checksum: 10c0/9b027d48493b79c05daa69eb9dd30aab19f491f2d0ca02f2af5abf8306a2c5023ea8ffa957e0f8275f1ef35f712bdfe51eec31b394c1f1390b25072ed0cc1d59
   languageName: node
   linkType: hard
 
-"@langchain/langgraph-checkpoint-postgres@npm:^1.0.2":
-  version: 1.0.2
-  resolution: "@langchain/langgraph-checkpoint-postgres@npm:1.0.2"
+"@langchain/langgraph-checkpoint-postgres@npm:^1.1.0":
+  version: 1.1.0
+  resolution: "@langchain/langgraph-checkpoint-postgres@npm:1.1.0"
   dependencies:
     pg: "npm:^8.12.0"
   peerDependencies:
     "@langchain/core": ^1.1.44
-    "@langchain/langgraph-checkpoint": ^1.0.0
-  checksum: 10c0/65ca9b35581c21719cb39d2f5ccd0d90d2f56fca8630ebb91fa77a876d4c8d5bd7a1d483843b2ded08bb0c9cd69d39a0850a26d0267169c2db9d986dcfde709f
+    "@langchain/langgraph-checkpoint": ^1.2.0
+  checksum: 10c0/57f18d6fea53b747cfba45d2d4ce162f09102dd1792f7731f0b4834fd8b258b2c97c5b8d8322fc991feab2b17f925d3434c6ad81020954ff998cc2aeeb67086f
   languageName: node
   linkType: hard
 
-"@langchain/langgraph-checkpoint@npm:^1.0.4":
-  version: 1.0.4
-  resolution: "@langchain/langgraph-checkpoint@npm:1.0.4"
-  dependencies:
-    uuid: "npm:^14.0.0"
+"@langchain/langgraph-checkpoint@npm:^1.2.0":
+  version: 1.2.0
+  resolution: "@langchain/langgraph-checkpoint@npm:1.2.0"
   peerDependencies:
-    "@langchain/core": ^1.1.44
-  checksum: 10c0/83cd4a04618e2b571b0b91656ba9ad670aa02191fb66247fa763cf8f45520094de0457b6e13e9b2e76cccd203e10e16d2ef70ac2f156f232ce4195b3d350d2d3
+    "@langchain/core": ^1.1.48
+  checksum: 10c0/dc0adf0d9aaebdd6583443dc68d7488f0f4ede6217c2993ecc65a9c5c9f18cd7af8b962c4aaf057eaa69921317e2371a758a7b3092579dba8cbc6ce96a9cd246
   languageName: node
   linkType: hard
 
-"@langchain/langgraph-sdk@npm:~1.9.19":
-  version: 1.9.20
-  resolution: "@langchain/langgraph-sdk@npm:1.9.20"
+"@langchain/langgraph-sdk@npm:~1.12.5":
+  version: 1.12.5
+  resolution: "@langchain/langgraph-sdk@npm:1.12.5"
   dependencies:
-    "@langchain/protocol": "npm:^0.0.16"
+    "@langchain/protocol": "npm:^0.0.19"
     "@types/json-schema": "npm:^7.0.15"
     p-queue: "npm:^9.0.1"
     p-retry: "npm:^7.1.1"
-    uuid: "npm:^14.0.0"
   peerDependencies:
     "@langchain/core": ^1.1.48
     react: ^18 || ^19
     react-dom: ^18 || ^19
-    svelte: ^4.0.0 || ^5.0.0
-    vue: ^3.0.0
   peerDependenciesMeta:
     react:
       optional: true
     react-dom:
       optional: true
-    svelte:
-      optional: true
-    vue:
-      optional: true
-  checksum: 10c0/bc268751713c3c60dffd1f5539e2364936bcbec03ac2efb8f10caef2db362799573ded2f9a5869aaf875d35cbd12eae134821c617a6aa2a42a67305369b86b3b
+  checksum: 10c0/3042a2ef079e8af6614598bc554d6ece3c8993f5dae50923db11442f9c0d166edab75f76ceef170a42969f56c0458401d271678f2674860acb443ef03f4ed13c
   languageName: node
   linkType: hard
 
-"@langchain/langgraph@npm:^1.3.7":
-  version: 1.3.7
-  resolution: "@langchain/langgraph@npm:1.3.7"
+"@langchain/langgraph@npm:^1.5.1":
+  version: 1.5.1
+  resolution: "@langchain/langgraph@npm:1.5.1"
   dependencies:
-    "@langchain/langgraph-checkpoint": "npm:^1.0.4"
-    "@langchain/langgraph-sdk": "npm:~1.9.19"
-    "@langchain/protocol": "npm:^0.0.16"
+    "@langchain/langgraph-checkpoint": "npm:^1.2.0"
+    "@langchain/langgraph-sdk": "npm:~1.12.5"
+    "@langchain/protocol": "npm:^0.0.19"
     "@standard-schema/spec": "npm:1.1.0"
-    uuid: "npm:^14.0.0"
   peerDependencies:
     "@langchain/core": ^1.1.48
     zod: ^3.25.32 || ^4.2.0
-    zod-to-json-schema: ^3.x
-  peerDependenciesMeta:
-    zod-to-json-schema:
-      optional: true
-  checksum: 10c0/c0fbb8b0a3c6527d147df805dc14fc24be2c751949afbbd59ea93b020e853694e13749fc2adcab22904d59dd2dcbe6f1955ae15adf97395d7c3a0aec326f3103
+  checksum: 10c0/f82724be2b8893c3c3fa0770b720e27c2d69c50205d62d2ee1f6c93c85dd19891210505fc7e59a32b10e454bf4ac6f7a57025aa0f96a388292f27bb267517212
   languageName: node
   linkType: hard
 
@@ -2762,10 +2748,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@langchain/protocol@npm:^0.0.16":
-  version: 0.0.16
-  resolution: "@langchain/protocol@npm:0.0.16"
-  checksum: 10c0/abf18baa9973f766b86e8153314a562702a30687b7dac4ae19deecd16965102c9ca76aa4c40d1bb5810f9b75fe76d221b8c6eb7234322910196dc59a7df7a822
+"@langchain/protocol@npm:^0.0.19":
+  version: 0.0.19
+  resolution: "@langchain/protocol@npm:0.0.19"
+  checksum: 10c0/f83e973a59fae9c899325b4e611432b7662501a2eb24ba1e820e79be6f25c4d34af5781348ffad73354797c8ff628e00614131a8c2a531c4e31deb4bc13880ba
   languageName: node
   linkType: hard
 
@@ -9859,15 +9845,6 @@ __metadata:
   bin:
     uuid: dist/bin/uuid
   checksum: 10c0/eab18c27fe4ab9fb9709a5d5f40119b45f2ec8314f8d4cf12ce27e4c6f4ffa4a6321dc7db6c515068fa373c075b49691ba969f0010bf37f44c37ca40cd6bf7fe
-  languageName: node
-  linkType: hard
-
-"uuid@npm:^14.0.0":
-  version: 14.0.0
-  resolution: "uuid@npm:14.0.0"
-  bin:
-    uuid: dist-node/bin/uuid
-  checksum: 10c0/a57ae7794c45005c1a9208989196c5baf79a7679c30f43c1bee9033a2c4d113a2cea216fa6fcc9663b08b0d55635df1a7c6eb7e7f3d21c3e50688c698fa39a50
   languageName: node
   linkType: hard
 
