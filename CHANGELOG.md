@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.9] - 2026-10-20
+
+### Security
+
+- **Connection strings no longer reach the logs with credentials.** `UniversalGraphModule` logged the first 50 characters of `MONGODB_URI` at startup (user name and the start of the password), and `DatabaseFactory` logged the main and graph database URIs in full on every new connection, at `debug` and `log`. All three now go through the new `redactConnectionString()`: credentials become `***`, secret-looking query parameters (`password`, `*Key`, `*Token`, …) are masked, hosts and the database name stay. A value that doesn't parse as `scheme://…` is logged as `[redacted]`. Rotate the database password if these logs were shipped to a shared log store.
+
 ## [0.6.8] - 2026-10-20
 
 ### Changed
