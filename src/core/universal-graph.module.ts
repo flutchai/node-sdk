@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import mongoose, { Connection } from "mongoose";
 import { MongoDBSaver } from "@langchain/langgraph-checkpoint-mongodb";
 import { createMongoClientAdapter } from "./mongodb";
+import { redactConnectionString } from "../utils/redact.utils";
 import {
   AbstractGraphBuilder,
   IGraphRequestPayload,
@@ -282,7 +283,9 @@ function buildCheckpointerProviders(
             );
           }
 
-          logger.log(`Checkpointer: MongoDB (${mongoUri.substring(0, 50)}...)`);
+          logger.log(
+            `Checkpointer: MongoDB (${redactConnectionString(mongoUri)})`
+          );
           await mongoose.connect(mongoUri, { dbName });
           return mongoose.connection;
         },

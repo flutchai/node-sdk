@@ -1,5 +1,6 @@
 import mongoose, { Connection } from "mongoose";
 import { Logger } from "@nestjs/common";
+import { redactConnectionString } from "../utils/redact.utils";
 
 export interface DatabaseConfig {
   /**
@@ -38,7 +39,9 @@ export class DatabaseFactory {
       return this.connections.get(connectionKey)!;
     }
 
-    this.logger.debug(`Creating connection to main database: ${mainDbUri}`);
+    this.logger.debug(
+      `Creating connection to main database: ${redactConnectionString(mainDbUri)}`
+    );
 
     const connection = await mongoose.createConnection(mainDbUri, {
       maxPoolSize: 10,
@@ -50,7 +53,9 @@ export class DatabaseFactory {
 
     this.connections.set(connectionKey, connection);
 
-    this.logger.log(`Connected to main database: ${mainDbUri}`);
+    this.logger.log(
+      `Connected to main database: ${redactConnectionString(mainDbUri)}`
+    );
 
     return connection;
   }
@@ -70,7 +75,7 @@ export class DatabaseFactory {
     }
 
     this.logger.debug(
-      `Creating connection to graph database: ${graphDbUri} for graph: ${graphName}`
+      `Creating connection to graph database: ${redactConnectionString(graphDbUri)} for graph: ${graphName}`
     );
 
     const connection = await mongoose.createConnection(graphDbUri, {
@@ -84,7 +89,7 @@ export class DatabaseFactory {
     this.connections.set(connectionKey, connection);
 
     this.logger.log(
-      `Connected to graph database: ${graphDbUri} for graph: ${graphName}`
+      `Connected to graph database: ${redactConnectionString(graphDbUri)} for graph: ${graphName}`
     );
 
     return connection;

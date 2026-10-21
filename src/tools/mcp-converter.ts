@@ -1,9 +1,7 @@
 import { DynamicStructuredTool, StructuredTool } from "@langchain/core/tools";
 import { RunnableConfig } from "@langchain/core/runnables";
-import { z } from "zod";
 import axios from "axios";
 import { Logger } from "@nestjs/common";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { McpTool } from "./mcp.interfaces";
 import { IGraphConfigurable } from "../graph/graph-types";
 
@@ -35,79 +33,62 @@ export class McpConverter {
   constructor(mcpRuntimeUrl: string = "http://localhost:3004") {
     this.mcpRuntimeUrl = mcpRuntimeUrl;
     this.logger.log(
-      `🔧 McpConverter initialized with SDK version 0.1.8 (manual jsonSchemaToZod)`
+      `🔧 McpConverter initialized (MCP JSON Schema passed through)`
     );
   }
 
   /**
-   * Convert JSON Schema to Zod schema manually
-   * This creates a standard Zod schema that zodToJsonSchema can convert back properly
+   * The tool's own JSON Schema, ready for the model.
+   *
+   * It used to be rebuilt as Zod by hand, which kept only top-level primitive
+   * types: a list of objects, an `anyOf`, a `$ref` — all became "any", and the
+   * model guessed the shape (a filter list sent as one object, rejected by the
+   * server). LangChain takes JSON Schema directly, so the schema now goes
+   * through as is; only local `$ref`s are inlined, because not every provider
+   * resolves them, and the meta keys providers reject are dropped.
    */
-  private jsonSchemaToZod(jsonSchema: any): z.ZodTypeAny {
-    if (!jsonSchema || typeof jsonSchema !== "object") {
-      return z.any();
-    }
+  static toModelSchema(inputSchema: unknown): Record<string, any> {
+    const root =
+      inputSchema && typeof inputSchema === "object"
+        ? (inputSchema as Record<string, any>)
+        : {};
+    const defs: Record<string, any> = {
+      ...(root.definitions ?? {}),
+      ...(root.$defs ?? {}),
+    };
 
-    try {
-      // Handle object type with properties
-      if (jsonSchema.type === "object" && jsonSchema.properties) {
-        const shape: Record<string, z.ZodTypeAny> = {};
-
-        for (const [key, propSchema] of Object.entries(jsonSchema.properties)) {
-          const prop = propSchema as any;
-          let zodProp: z.ZodTypeAny;
-
-          // Convert property based on type
-          switch (prop.type) {
-            case "string":
-              zodProp = z.string();
-              break;
-            case "number":
-              zodProp = z.number();
-              break;
-            case "boolean":
-              zodProp = z.boolean();
-              break;
-            case "integer":
-              zodProp = z.number().int();
-              break;
-            case "array":
-              zodProp = z.array(z.any());
-              break;
-            case "object":
-              zodProp = z.record(z.any());
-              break;
-            default:
-              zodProp = z.any();
-          }
-
-          // Add description if present
-          if (prop.description) {
-            zodProp = zodProp.describe(prop.description);
-          }
-
-          // Make optional if not in required array
-          if (!jsonSchema.required?.includes(key)) {
-            zodProp = zodProp.optional();
-          }
-
-          shape[key] = zodProp;
-        }
-
-        return z.object(shape);
+    const resolve = (node: any, depth: number): any => {
+      if (Array.isArray(node)) return node.map(item => resolve(item, depth));
+      if (!node || typeof node !== "object") return node;
+      if (typeof node.$ref === "string") {
+        const match = /^#\/(?:\$defs|definitions)\/(.+)$/.exec(node.$ref);
+        const target = match ? defs[decodeURIComponent(match[1])] : undefined;
+        // An unknown or cyclic reference degrades to "any" instead of failing the tool.
+        if (!target || depth > 8) return {};
+        const { $ref: _ref, ...siblings } = node;
+        return resolve({ ...target, ...siblings }, depth + 1);
       }
+      const out: Record<string, any> = {};
+      for (const [key, value] of Object.entries(node)) {
+        if (
+          key === "$defs" ||
+          key === "definitions" ||
+          key === "$schema" ||
+          key === "$id"
+        ) {
+          continue;
+        }
+        out[key] = resolve(value, depth);
+      }
+      return out;
+    };
 
-      // Fallback to z.any() for other types
-      this.logger.warn(
-        `Unsupported JSON Schema structure, falling back to z.any()`
-      );
-      return z.any();
-    } catch (error) {
-      this.logger.warn(
-        `Failed to convert JSON Schema, falling back to z.any(): ${error}`
-      );
-      return z.any();
-    }
+    const schema = resolve(root, 0);
+    return {
+      ...schema,
+      type: "object",
+      properties: schema.properties ?? {},
+    };
   }
 
   /**
@@ -140,67 +121,12 @@ export class McpConverter {
       }
     }
 
-    const schema = this.jsonSchemaToZod(mcpTool.inputSchema);
-
+    const schema = McpConverter.toModelSchema(mcpTool.inputSchema);
     logger.debug(
-      `🔧 [${mcpTool.name}] Original schema:`,
-      JSON.stringify(mcpTool.inputSchema, null, 2)
-    );
-    logger.debug(
-      `🔧 [${mcpTool.name}] Using schema type: ${(schema as any)?._def?.typeName ?? "unknown"}`
+      `🔧 [${mcpTool.name}] Schema for the model: ${JSON.stringify(schema)}`
     );
 
-    // Log converted Zod schema details to verify descriptions are preserved
-    if (
-      (schema as any)?._def?.shape &&
-      typeof (schema as any)._def.shape === "function"
-    ) {
-      try {
-        const shape = (schema as any)._def.shape();
-        logger.debug(
-          `🔧 [${mcpTool.name}] Converted Zod schema shape:`,
-          JSON.stringify(
-            Object.entries(shape).reduce(
-              (acc, [key, val]: [string, any]) => {
-                acc[key] = {
-                  type: val?._def?.typeName,
-                  description: val?._def?.description,
-                  optional: val?._def?.typeName === "ZodOptional",
-                };
-                return acc;
-              },
-              {} as Record<string, any>
-            ),
-            null,
-            2
-          )
-        );
-      } catch (error) {
-        logger.debug(
-          `🔧 [${mcpTool.name}] Could not extract Zod schema shape: ${error}`
-        );
-      }
-    }
-
-    // CRITICAL CHECK: Convert Zod back to JSON Schema to see what LangChain will send to LLM
-    try {
-      const convertedJsonSchema = zodToJsonSchema(schema);
-      logger.warn(
-        `🔧 [${mcpTool.name}] JSON Schema that LangChain will use:`,
-        JSON.stringify(convertedJsonSchema, null, 2)
-      );
-    } catch (error) {
-      logger.warn(
-        `🔧 [${mcpTool.name}] Could not convert Zod to JSON Schema: ${error}`
-      );
-    }
-
-    return new DynamicStructuredTool<
-      z.ZodTypeAny,
-      Record<string, any>,
-      any,
-      string
-    >({
+    return new DynamicStructuredTool({
       name: mcpTool.name,
       description: enhancedDescription,
       schema,
