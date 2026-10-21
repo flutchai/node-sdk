@@ -70,7 +70,12 @@ export class McpConverter {
       }
       const out: Record<string, any> = {};
       for (const [key, value] of Object.entries(node)) {
-        if (key === "$defs" || key === "definitions" || key === "$schema" || key === "$id") {
+        if (
+          key === "$defs" ||
+          key === "definitions" ||
+          key === "$schema" ||
+          key === "$id"
+        ) {
           continue;
         }
         out[key] = resolve(value, depth);
