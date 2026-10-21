@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.10] - 2026-10-22
+
+### Fixed
+
+- **MCP tools reach the model with their real input schema.** `McpConverter` rebuilt every tool schema as Zod by hand and kept only top-level primitive types: lists of objects, `anyOf`, `enum` inside objects and `$ref` all became "any". The model then guessed argument shapes — a client MCP server's `filters` (a list of `{field, op, value}`) arrived as one object and the call failed validation. The schema now goes to LangChain as JSON Schema, unchanged except that local `$ref`s (`#/$defs/…`, `#/definitions/…`) are inlined and `$defs` / `$schema` / `$id` are dropped; an unknown or cyclic reference becomes "any" rather than failing the tool. New: `McpConverter.toModelSchema()`.
+
 ## [0.6.9] - 2026-10-20
 
 ### Security

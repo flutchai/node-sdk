@@ -337,3 +337,61 @@ describe("McpConverter - Context Extraction for Goal Tracking", () => {
     // reportGoalAchieved('meeting_booked', { meetingId: '...' })
   });
 });
+
+describe("McpConverter.toModelSchema", () => {
+  // The client's list_records: filters is an optional list of Filter objects.
+  const listRecords = {
+    type: "object",
+    required: ["dataset"],
+    properties: {
+      dataset: { type: "string", enum: ["events", "brands"] },
+      filters: {
+        anyOf: [{ type: "array", items: { $ref: "#/$defs/Filter" } }, { type: "null" }],
+        default: null,
+      },
+      limit: { type: "integer", default: 50, minimum: 1 },
+    },
+    $defs: {
+      Filter: {
+        type: "object",
+        required: ["field", "op"],
+        properties: {
+          field: { type: "string" },
+          op: { enum: ["eq", "in"], type: "string" },
+          value: { description: "for in — a list" },
+        },
+      },
+    },
+  };
+
+  it("keeps nested structure the model needs: lists of objects, enums, anyOf", () => {
+    const schema = McpConverter.toModelSchema(listRecords);
+    expect(schema.properties.dataset.enum).toEqual(["events", "brands"]);
+    expect(schema.properties.filters.anyOf[0].items).toEqual(listRecords.$defs.Filter);
+    expect(schema.required).toEqual(["dataset"]);
+    expect(schema.$defs).toBeUndefined();
+  });
+
+  it("degrades unknown and cyclic references instead of failing", () => {
+    const schema = McpConverter.toModelSchema({
+      type: "object",
+      properties: { a: { $ref: "#/$defs/Missing" }, b: { $ref: "#/$defs/Node" } },
+      $defs: { Node: { type: "object", properties: { next: { $ref: "#/$defs/Node" } } } },
+    });
+    expect(schema.properties.a).toEqual({});
+    expect(JSON.stringify(schema)).not.toContain("$ref");
+  });
+
+  it("always yields an object schema", () => {
+    expect(McpConverter.toModelSchema(undefined)).toEqual({ type: "object", properties: {} });
+  });
+
+  it("is the schema the tool exposes", () => {
+    const tool = new McpConverter("http://mcp").convertTool({
+      name: "alreadyglobal_list_records",
+      description: "Rows of a dataset",
+      inputSchema: listRecords as any,
+    });
+    expect((tool.schema as any).properties.filters.anyOf[0].items.properties.op.enum).toEqual(["eq", "in"]);
+  });
+});
