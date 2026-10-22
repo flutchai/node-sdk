@@ -9,6 +9,23 @@ import { BaseLanguageModelInput } from "@langchain/core/language_models/base";
 import { AIMessageChunk } from "@langchain/core/messages";
 import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
 import { McpToolFilter } from "../tools/mcp-tool-filter";
+import {
+  ToolSearchCatalog,
+  ToolSearchOptions,
+  DEFAULT_TOOL_SEARCH_RESULTS,
+  bindToolsWithSearch,
+  createToolSearchTool,
+  formatToolSearchResult,
+  splitTools,
+  toolSearchApplies,
+  withToolReferences,
+  TOOL_SEARCH_NAME,
+} from "../tools/tool-search";
+import {
+  CallbackManager,
+  parseCallbackConfigArg,
+} from "@langchain/core/callbacks/manager";
+import type { RunnableConfig } from "@langchain/core/runnables";
 import { IAgentToolConfig } from "../tools/config";
 import {
   isReasoningModel,
@@ -63,6 +80,12 @@ export class ModelInitializer implements IModelInitializer {
 
   // Cache for model instances to avoid recreating identical models
   private modelInstanceCache = new Map<string, Model>();
+
+  // Tool-search catalogs, keyed like the model instance that uses them
+  private toolSearchCatalogs = new Map<
+    string,
+    { catalog: ToolSearchCatalog; maxResults: number }
+  >();
 
   private static readonly DEFAULT_ENV_MAP: Partial<
     Record<ModelProvider, string>
@@ -191,9 +214,14 @@ export class ModelInitializer implements IModelInitializer {
         : `${withSampling}:pc:${config.promptCache ?? "auto"}:${config.promptCacheTtl ?? "default"}`;
     // Effort changes the constructed model, and on Bedrock it also changes the
     // prompt-cache key — two efforts must never share one instance.
-    return config.effort === undefined
-      ? withCache
-      : `${withCache}:eff:${config.effort}`;
+    const withEffort =
+      config.effort === undefined
+        ? withCache
+        : `${withCache}:eff:${config.effort}`;
+    // Tool search binds a different tool set. Off → key unchanged.
+    return config.toolSearch?.enabled
+      ? `${withEffort}:ts:${JSON.stringify(config.toolSearch)}`
+      : withEffort;
   }
 
   // Chat model creators
@@ -245,10 +273,13 @@ export class ModelInitializer implements IModelInitializer {
         ...(promptCacheControl && { cache_control: promptCacheControl }),
         anthropicApiKey:
           apiToken || this.resolveApiKey(ModelProvider.ANTHROPIC),
-        ...(routerURL && {
-          anthropicApiUrl: routerURL,
-          clientOptions: { fetch: flutchFetch },
-        }),
+        ...(routerURL && { anthropicApiUrl: routerURL }),
+        // Tool search results become `tool_reference` blocks on the wire
+        // (LangChain cannot express them). A request without a search passes
+        // through untouched.
+        clientOptions: {
+          fetch: withToolReferences(routerURL ? flutchFetch : fetch),
+        },
       }) as unknown as BaseChatModel;
     },
 
@@ -611,7 +642,10 @@ export class ModelInitializer implements IModelInitializer {
         // Converse takes cache control as a per-call option; the Anthropic
         // client already got it as a constructor field, and handing it the
         // same value twice would put an unknown key in its call options.
-        finalConfig.useBedrock ? promptCacheControl : undefined
+        finalConfig.useBedrock ? promptCacheControl : undefined,
+        config.toolSearch?.enabled
+          ? { options: config.toolSearch, cacheKey }
+          : undefined
       );
       this.modelInstanceCache.set(cacheKey, boundModel);
       return boundModel;
@@ -645,12 +679,14 @@ export class ModelInitializer implements IModelInitializer {
     customTools?: DynamicStructuredTool[],
     mcpServers?: Record<string, any>[],
     mcpContext?: Record<string, any>,
-    promptCacheControl?: PromptCacheControl
+    promptCacheControl?: PromptCacheControl,
+    toolSearch?: { options: ToolSearchOptions; cacheKey: string }
   ): Promise<
     | BaseChatModel
     | Runnable<BaseLanguageModelInput, AIMessageChunk, BaseChatModelCallOptions>
   > {
     const allTools: StructuredTool[] = [];
+    const mcpToolsFound: StructuredTool[] = [];
 
     // Process toolsConfig + inline per-tenant MCP servers (dynamic schemas from MCP Runtime)
     const enabledToolsConfig = (toolsConfig || []).filter(
@@ -677,6 +713,7 @@ export class ModelInitializer implements IModelInitializer {
         );
 
         allTools.push(...mcpTools);
+        mcpToolsFound.push(...mcpTools);
       } catch (error) {
         this.logger.error(
           `Failed to fetch tools from MCP Runtime: ${error instanceof Error ? error.message : String(error)}`
@@ -704,6 +741,45 @@ export class ModelInitializer implements IModelInitializer {
         cache_control?: PromptCacheControl;
       } = { cache_control: promptCacheControl };
 
+      if (
+        toolSearch &&
+        toolSearchApplies(toolSearch.options, allTools.length)
+      ) {
+        // Graph tools stay in sight: the graph's own flow relies on them.
+        const { core, deferred } = splitTools(
+          mcpToolsFound,
+          toolSearch.options,
+          customTools ?? []
+        );
+        if (deferred.length > 0) {
+          const maxResults =
+            toolSearch.options.maxResults ?? DEFAULT_TOOL_SEARCH_RESULTS;
+          const catalog = new ToolSearchCatalog(deferred);
+          this.toolSearchCatalogs.set(toolSearch.cacheKey, {
+            catalog,
+            maxResults,
+          });
+          // Claude through the Messages API loads deferred tools itself and
+          // keeps the prompt cache; every other client binds per turn.
+          const mode = model instanceof ChatAnthropic ? "deferred" : "rebind";
+          this.logger.debug(
+            `Tool search (${mode}): ${core.length + (customTools?.length ?? 0)} tools in sight, ${deferred.length} found on demand`
+          );
+          return bindToolsWithSearch({
+            model,
+            core: [...core, ...(customTools ?? [])],
+            deferred,
+            searchTool: createToolSearchTool(catalog, maxResults),
+            mode,
+            bindOptions: promptCacheControl ? boundOptions : undefined,
+          }) as Runnable<
+            BaseLanguageModelInput,
+            AIMessageChunk,
+            BaseChatModelCallOptions
+          >;
+        }
+      }
+
       const modelWithTools = promptCacheControl
         ? model.bindTools(allTools, boundOptions)
         : model.bindTools(allTools);
@@ -711,6 +787,71 @@ export class ModelInitializer implements IModelInitializer {
     }
 
     return model;
+  }
+
+  /**
+   * Runs a `search_tools` call. `config` must be the one the model was
+   * initialized with (same tools, same `toolSearch`): it names the catalog.
+   * Emits tool start/end events like `McpRuntimeHttpClient.executeToolWithEvents`,
+   * so the call shows as a finished step in the chat.
+   *
+   * Never throws: a failure comes back as the tool's answer.
+   */
+  async searchTools(
+    config: ModelByIdConfig,
+    args: { query?: unknown; limit?: unknown },
+    runConfig?: RunnableConfig
+  ): Promise<{ content: string; success: boolean }> {
+    const parsedConfig = parseCallbackConfigArg(runConfig);
+    const callbackManager = CallbackManager.configure(parsedConfig.callbacks);
+    const runManager = await callbackManager?.handleToolStart(
+      {
+        name: TOOL_SEARCH_NAME,
+        lc: 1,
+        type: "not_implemented",
+        id: ["langchain", "tools", TOOL_SEARCH_NAME],
+      },
+      JSON.stringify(args ?? {}),
+      parsedConfig.runId,
+      undefined,
+      parsedConfig.tags,
+      parsedConfig.metadata,
+      TOOL_SEARCH_NAME
+    );
+
+    try {
+      const key = this.generateModelCacheKey(config);
+      if (!this.toolSearchCatalogs.has(key)) {
+        // A new pod, or the model was evicted: building it builds the catalog.
+        await this.initializeChatModel(config);
+      }
+      const entry = this.toolSearchCatalogs.get(key);
+      const query = typeof args?.query === "string" ? args.query : "";
+      const limit = Number(args?.limit);
+      const content = !entry
+        ? JSON.stringify({
+            error:
+              "Tool search is not available for this agent: every tool is already loaded.",
+          })
+        : !query.trim()
+          ? JSON.stringify({ error: "query is required" })
+          : formatToolSearchResult(
+              entry.catalog.search(
+                query,
+                Number.isFinite(limit) && limit > 0 ? limit : entry.maxResults
+              )
+            );
+      await runManager?.handleToolEnd(content);
+      return { content, success: !!entry && !!query.trim() };
+    } catch (error) {
+      await runManager?.handleToolError(error);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Tool search failed: ${message}`);
+      return {
+        content: JSON.stringify({ error: `Tool search failed: ${message}` }),
+        success: false,
+      };
+    }
   }
 
   async initializeRerankModel(

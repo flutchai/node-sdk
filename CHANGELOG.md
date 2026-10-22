@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-22
+
+### Added
+
+- **Tool search: the model finds tools on demand instead of seeing all of them.** An agent with many tools paid for every schema on every turn (69 zetap tools are about 86k characters) and picked the wrong tool more often past 30–50 of them. With `toolSearch: { enabled: true, alwaysLoaded: [...] }` in `initializeChatModel`, the model sees `search_tools`, the `alwaysLoaded` tools and the graph's own `customTools`; the rest are found by a BM25 search over names, descriptions and argument names (Russian and English endings both match). Graphs run `search_tools` calls with `ModelInitializer.searchTools(sameConfig, args, runConfig)`, which emits the tool events itself; `isToolSearchCall(name)` tells them apart. Which tools a conversation has found is read from its history, so graphs keep no extra state and a fresh pod rebuilds the catalog.
+  - **Claude through the Anthropic Messages API** (the router and Bedrock InvokeModel included): every tool is sent with `defer_loading: true`, and search results go out as `tool_reference` blocks, so the API loads the found definitions and the prompt cache survives a search. LangChain drops `tool_reference` blocks, so the Anthropic client's `fetch` rewrites the search results on the wire (`withToolReferences`); a request without a search is untouched.
+  - **Every other client** (Bedrock Converse, OpenAI, Mistral…): each turn binds the core tools plus the ones found so far; the first turn after a new find misses the prompt cache once.
+  - Below `minTools` (default 15) nothing changes. Off by default; the model cache key changes only when it is on.
+
 ## [0.6.12] - 2026-10-22
 
 ### Added

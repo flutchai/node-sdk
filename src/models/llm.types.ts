@@ -5,6 +5,7 @@ import {
 } from "@langchain/core/language_models/chat_models";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { IAgentToolConfig } from "../tools";
+import type { ToolSearchOptions } from "../tools/tool-search";
 import { Runnable } from "@langchain/core/runnables";
 import { BaseLanguageModelInput } from "@langchain/core/language_models/base";
 import { AIMessageChunk } from "@langchain/core/messages";
@@ -66,6 +67,13 @@ export interface ModelByIdConfig {
   mcpServers?: Record<string, any>[];
   /** Optional: context (companyId/agentId) for resolving inline server creds. */
   mcpContext?: Record<string, any>;
+  /**
+   * Optional: find tools on demand. The model sees `search_tools` and the
+   * `alwaysLoaded` tools; the rest are loaded when a search finds them.
+   * Run the model's `search_tools` calls with `ModelInitializer.searchTools`
+   * and the same config. Part of the model cache key.
+   */
+  toolSearch?: ToolSearchOptions;
   /**
    * Override Bedrock prompt caching for this call.
    * `true` — send cache points even if the SDK does not recognise the model.

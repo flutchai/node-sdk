@@ -14,3 +14,6 @@ export * from "./mcp-runtime-http.client";
 
 // Attachment helpers
 export * from "./attachment-summary";
+
+// Tool search: find tools on demand instead of binding all of them
+export * from "./tool-search";
