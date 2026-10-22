@@ -229,6 +229,35 @@ curl http://localhost:3000/registry
 
 ## Advanced Usage
 
+### Tool search for agents with many tools
+
+Every bound tool's schema is sent on every turn. With dozens of tools that is most of the prompt, and models pick the wrong tool more often past 30–50 of them. Turn on tool search and the model sees a few tools plus `search_tools`, and finds the rest when a task needs them:
+
+```typescript
+import { isToolSearchCall } from "@flutchai/flutch-sdk";
+
+const modelConfig = {
+  modelId,
+  toolsConfig,
+  toolSearch: { enabled: true, alwaysLoaded: ["list_sites", "list_products"] },
+};
+const model = await modelInitializer.initializeChatModel(modelConfig);
+
+// In the tools node: search runs in the SDK, against the same catalog.
+if (isToolSearchCall(toolCall.name)) {
+  const { content } = await modelInitializer.searchTools(
+    modelConfig,
+    toolCall.args,
+    config
+  );
+  messages.push(
+    new ToolMessage({ content, tool_call_id: toolCall.id, name: toolCall.name })
+  );
+}
+```
+
+Pass the same config to `searchTools` that built the model — it names the catalog. Found tools are read from the conversation history, so the graph keeps no extra state. Claude through the Anthropic Messages API loads found tools as deferred definitions (`defer_loading` + `tool_reference`) and keeps the prompt cache; other providers bind the core tools plus the found ones each turn. `alwaysLoaded` also takes a comma-separated string; `maxResults` (default 5) and `minTools` (default 15) tune it.
+
 ### Using GraphTypeUtils
 
 ```typescript
