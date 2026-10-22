@@ -348,9 +348,11 @@ export class UniversalGraphModule {
       // Graph engines
       {
         provide: LangGraphEngine,
-        useFactory: (eventProcessor: EventProcessor) =>
-          new LangGraphEngine(eventProcessor, undefined),
-        inject: [EventProcessor],
+        useFactory: (
+          eventProcessor: EventProcessor,
+          configService: ConfigService
+        ) => new LangGraphEngine(eventProcessor, configService),
+        inject: [EventProcessor, ConfigService],
       },
       BuilderRegistryService,
       GraphEngineFactory,

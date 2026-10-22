@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.11] - 2026-10-22
+
+### Fixed
+
+- **Trace and usage webhooks were never sent from microservice graphs.** `UniversalGraphModule` built `LangGraphEngine` with `configService` set to `undefined`, so `INTERNAL_API_TOKEN` always read as empty and both `/internal/usage/trace-events/batch` and `/internal/usage/metrics` were skipped with "INTERNAL_API_TOKEN not configured" (and `API_URL` silently fell back to `http://amelie-service`). The engine now gets the real `ConfigService`. The admin trace view and usage metering work again for external graph services after they upgrade; traces of earlier threads were never stored and cannot be recovered.
+
 ## [0.6.10] - 2026-10-22
 
 ### Fixed
