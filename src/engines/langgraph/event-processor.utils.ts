@@ -436,6 +436,13 @@ export class EventProcessor {
       if (event.name === "send_attachments" && event.data.attachments) {
         const attachments = event.data.attachments || [];
         acc.attachments = [...acc.attachments, ...attachments];
+        // Shown while the answer is still being written (a chart with an
+        // early finding); the final message carries the full list as before.
+        this.sendDelta(
+          channel,
+          { type: "attachments_added", attachments },
+          onPartial
+        );
 
         this.logger.debug(
           "[ATTACHMENTS] Extracted from send_attachments event",
@@ -467,7 +474,18 @@ export class EventProcessor {
       // only incremental `args` without name/id — those chunks contribute
       // nothing useful and the on_tool_start handler synthesizes the block
       // instead. Conversion is still cheap and harmless either way.
+      // Anthropic models send a tool call in both places at once: in content
+      // and again as tool_call_chunks. Taking both opened two steps per call —
+      // one got the result, the other stayed "running" with its arguments
+      // interleaved — so the chunks are used only when content has no tool blocks.
+      const contentHasToolBlocks = blocks.some(
+        block =>
+          block?.type === "tool_use" ||
+          block?.type === "tool_call" ||
+          block?.type === "input_json_delta"
+      );
       if (
+        !contentHasToolBlocks &&
         Array.isArray(chunk.tool_call_chunks) &&
         chunk.tool_call_chunks.length > 0
       ) {

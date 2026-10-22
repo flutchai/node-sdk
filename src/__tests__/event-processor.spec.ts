@@ -129,6 +129,78 @@ describe("EventProcessor", () => {
     });
   });
 
+  describe("processEvent - tool call in content and in tool_call_chunks", () => {
+    it("opens one step per call and does not double its arguments", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+      const stream = (content: any[], toolCallChunks: any[]) => ({
+        event: "on_chat_model_stream",
+        data: { chunk: { content, tool_call_chunks: toolCallChunks } },
+        metadata: {
+          stream_channel: StreamChannel.TEXT,
+          langgraph_node: "agent",
+        },
+      });
+
+      processor.processEvent(
+        acc,
+        stream(
+          [
+            {
+              type: "tool_use",
+              id: "toolu_1",
+              name: "brand_profile",
+              input: "",
+            },
+          ],
+          [{ id: "toolu_1", name: "brand_profile", args: "", index: 0 }]
+        ),
+        onPartial
+      );
+      processor.processEvent(
+        acc,
+        stream(
+          [{ type: "input_json_delta", input: '{"brand": "Bimba"}' }],
+          [{ args: '{"brand": "Bimba"}', index: 0 }]
+        ),
+        onPartial
+      );
+      processor.processEvent(
+        acc,
+        toolStartEvent("brand_profile", "run-1"),
+        onPartial
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      const steps = [...state.contentChain, state.currentBlock].filter(
+        (b): b is NonNullable<typeof b> => !!b && b.type === "tool_use"
+      );
+      expect(steps).toHaveLength(1);
+      expect(steps[0].input).toBe('{"brand": "Bimba"}');
+      expect(state.pendingToolBlocks).toHaveLength(0);
+    });
+
+    it("still takes tool_call_chunks when content carries no tool blocks (Bedrock Converse)", () => {
+      const acc = createAccumulator();
+      processor.processEvent(acc, {
+        event: "on_chat_model_stream",
+        data: {
+          chunk: {
+            content: "",
+            tool_call_chunks: [{ id: "c1", name: "search", args: "{}" }],
+          },
+        },
+        metadata: {
+          stream_channel: StreamChannel.TEXT,
+          langgraph_node: "agent",
+        },
+      });
+      expect(
+        acc.channels.get(StreamChannel.TEXT)!.pendingToolBlocks
+      ).toHaveLength(1);
+    });
+  });
+
   describe("processEvent - single tool lifecycle", () => {
     it("should create tool_use block and track in pendingToolBlocks", () => {
       const acc = createAccumulator();
@@ -1498,6 +1570,29 @@ describe("EventProcessor", () => {
         expect.objectContaining({ type: "text", text: "Hello from node" })
       );
       expect(onPartial).toHaveBeenCalled();
+    });
+
+    it("should stream attachments as they are dispatched and keep them for the final message", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+      const chart = {
+        type: "chart",
+        value: { type: "bar", title: "t", datasets: [] },
+      };
+
+      processor.processEvent(
+        acc,
+        customEvent("send_attachments", { attachments: [chart] }),
+        onPartial
+      );
+
+      expect(acc.attachments).toEqual([chart]);
+      expect(onPartial).toHaveBeenCalledWith(
+        JSON.stringify({
+          channel: StreamChannel.TEXT,
+          delta: { type: "attachments_added", attachments: [chart] },
+        })
+      );
     });
 
     it("should route custom event to correct channel", () => {
