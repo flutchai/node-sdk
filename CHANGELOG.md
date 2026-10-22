@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.12] - 2026-10-22
+
+### Added
+
+- **Attachments stream as they are dispatched.** `dispatchAttachments` from a graph node now also sends a partial delta `{ type: "attachments_added", attachments }`, so a client can show a chart or a card while the answer is still being written. The final message carries the full list as before; clients that do not know the delta ignore it.
+
 ## [0.6.11] - 2026-10-22
 
 ### Fixed

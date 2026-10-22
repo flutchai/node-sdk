@@ -436,6 +436,13 @@ export class EventProcessor {
       if (event.name === "send_attachments" && event.data.attachments) {
         const attachments = event.data.attachments || [];
         acc.attachments = [...acc.attachments, ...attachments];
+        // Shown while the answer is still being written (a chart with an
+        // early finding); the final message carries the full list as before.
+        this.sendDelta(
+          channel,
+          { type: "attachments_added", attachments },
+          onPartial
+        );
 
         this.logger.debug(
           "[ATTACHMENTS] Extracted from send_attachments event",

@@ -1500,6 +1500,29 @@ describe("EventProcessor", () => {
       expect(onPartial).toHaveBeenCalled();
     });
 
+    it("should stream attachments as they are dispatched and keep them for the final message", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+      const chart = {
+        type: "chart",
+        value: { type: "bar", title: "t", datasets: [] },
+      };
+
+      processor.processEvent(
+        acc,
+        customEvent("send_attachments", { attachments: [chart] }),
+        onPartial
+      );
+
+      expect(acc.attachments).toEqual([chart]);
+      expect(onPartial).toHaveBeenCalledWith(
+        JSON.stringify({
+          channel: StreamChannel.TEXT,
+          delta: { type: "attachments_added", attachments: [chart] },
+        })
+      );
+    });
+
     it("should route custom event to correct channel", () => {
       const acc = createAccumulator();
 
