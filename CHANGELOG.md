@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Attachments stream as they are dispatched.** `dispatchAttachments` from a graph node now also sends a partial delta `{ type: "attachments_added", attachments }`, so a client can show a chart or a card while the answer is still being written. The final message carries the full list as before; clients that do not know the delta ignore it.
 
+### Fixed
+
+- **Every tool call showed twice, one copy stuck at "Running…".** Anthropic models stream a tool call both in `chunk.content` and in `chunk.tool_call_chunks`; the event processor took both and opened two steps per call. The result went to one, the other never finished and got the arguments interleaved (`{"brand": "B{"brand": "Bimba…`). `tool_call_chunks` are now used only when the content carries no tool blocks (the Bedrock Converse case they were added for).
+
 ## [0.6.11] - 2026-10-22
 
 ### Fixed
