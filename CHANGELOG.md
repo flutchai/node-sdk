@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-24
+
+### Fixed
+
+- **Trace batches of hundreds of MB.** Every chain and model event carried the whole conversation so far, so a 60-step run sent its history 60 times over; the backend spent seconds parsing, validating and storing one batch, and its other requests (token checks of the router) timed out. In a trace event a `messages` history now keeps its first message and the last six, with `{ type: "trace_omitted", omittedMessages }` in between, and strings are cut at 20 000 characters (was 100 000). Only the trace changes; the run and its state are untouched.
+
 ## [0.7.1] - 2026-10-24
 
 ### Fixed
