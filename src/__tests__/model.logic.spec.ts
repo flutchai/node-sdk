@@ -172,8 +172,14 @@ describe("model.logic", () => {
 
     it("should send reasoning models through the Responses API", () => {
       // GPT-6 rejects function tools on /v1/chat/completions while reasoning.
-      expect(buildOpenAIModelConfig("gpt-6.1-sol", undefined, 16000, "k").useResponsesApi).toBe(true);
-      expect(buildOpenAIModelConfig("gpt-5.4-mini", undefined, 16000, "k").useResponsesApi).toBe(true);
+      expect(
+        buildOpenAIModelConfig("gpt-6.1-sol", undefined, 16000, "k")
+          .useResponsesApi
+      ).toBe(true);
+      expect(
+        buildOpenAIModelConfig("gpt-5.4-mini", undefined, 16000, "k")
+          .useResponsesApi
+      ).toBe(true);
     });
 
     it("should force temperature=1 for GPT-5", () => {
