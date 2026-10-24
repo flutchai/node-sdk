@@ -937,27 +937,41 @@ const TRACE_KEEP_LAST_MESSAGES = 6;
 /**
  * Every chain and model event carries the whole conversation so far; a run of
  * 60 steps sent the history 60 times over (batches of hundreds of MB that
- * stalled the backend). In a trace event a `messages` history keeps its first
- * message (the system prompt) and the last few, with a note of how many were
- * left out. Only the trace is affected, never the run.
+ * stalled the backend). In a trace event a history keeps its first message
+ * (the system prompt) and the last few, with a note of how many were left
+ * out, wherever it sits: under `messages`, as a chat model's input or as a
+ * node's input (a tool-search model gets the bare list). Only the trace is
+ * affected, never the run.
  */
 export function compactTraceMessages(value: unknown, depth = 0): unknown {
   if (depth > 6 || value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) {
-    return value.map(item => compactTraceMessages(item, depth + 1));
+    const items = isHistory(value) ? compactHistory(value) : value;
+    return items.map(item => compactTraceMessages(item, depth + 1));
   }
   const out: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-    if (key === "messages" && Array.isArray(item)) {
-      // Chat model inputs are a list of histories ([[...]]); state is one history.
-      out[key] = item.every(Array.isArray)
-        ? item.map(history => compactHistory(history as unknown[]))
-        : compactHistory(item);
-    } else {
-      out[key] = compactTraceMessages(item, depth + 1);
-    }
+    out[key] = compactTraceMessages(item, depth + 1);
   }
   return out;
+}
+
+/**
+ * A list of chat messages: LangChain messages (instances or serialized) have
+ * `lc_kwargs`; plain ones have `content` with a `type` or `role`.
+ */
+function isHistory(items: unknown[]): boolean {
+  return (
+    items.length > TRACE_KEEP_LAST_MESSAGES + 2 &&
+    items.every(
+      item =>
+        item !== null &&
+        typeof item === "object" &&
+        !Array.isArray(item) &&
+        ("lc_kwargs" in item ||
+          ("content" in item && ("type" in item || "role" in item)))
+    )
+  );
 }
 
 function compactHistory(messages: unknown[]): unknown[] {
