@@ -385,6 +385,16 @@ export function generateModelCacheKey(
 /**
  * Build the constructor config object for a ChatOpenAI instance.
  * Returns different shapes for reasoning models (GPT-5+) vs legacy models.
+ *
+ * The key goes in `apiKey`: @langchain/openai 1.x reads only `apiKey` (or
+ * `OPENAI_API_KEY`), and the legacy `openAIApiKey` is ignored, so the call
+ * failed with "Missing credentials".
+ *
+ * Reasoning models go through the Responses API: GPT-6 reasons by default and
+ * rejects function tools on /v1/chat/completions ("Function tools with
+ * reasoning_effort are not supported… use /v1/responses"), and some of them
+ * cannot turn reasoning off. OpenAI caches the prompt prefix on its own; no
+ * cache markers are needed.
  */
 export function buildOpenAIModelConfig(
   modelName: string,
@@ -398,7 +408,8 @@ export function buildOpenAIModelConfig(
       temperature: 1, // Reasoning models only support temperature=1
       maxCompletionTokens: maxTokens,
       streaming: true,
-      openAIApiKey: apiToken,
+      useResponsesApi: true,
+      apiKey: apiToken,
     };
   }
 
@@ -409,6 +420,6 @@ export function buildOpenAIModelConfig(
     ...(temperature !== undefined && { temperature }),
     maxTokens,
     streaming: true,
-    openAIApiKey: apiToken,
+    apiKey: apiToken,
   };
 }

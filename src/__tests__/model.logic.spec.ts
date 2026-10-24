@@ -151,7 +151,9 @@ describe("model.logic", () => {
       expect(config.maxCompletionTokens).toBeUndefined();
       expect(config.temperature).toBe(0.7);
       expect(config.streaming).toBe(true);
-      expect(config.openAIApiKey).toBe("sk-test");
+      expect(config.apiKey).toBe("sk-test");
+      expect(config).not.toHaveProperty("openAIApiKey");
+      expect(config).not.toHaveProperty("useResponsesApi");
     });
 
     it("should use maxCompletionTokens for reasoning models", () => {
@@ -165,6 +167,13 @@ describe("model.logic", () => {
       expect(config.maxCompletionTokens).toBe(4096);
       expect(config.maxTokens).toBeUndefined();
       expect(config.temperature).toBe(1); // forced
+      expect(config.apiKey).toBe("sk-test");
+    });
+
+    it("should send reasoning models through the Responses API", () => {
+      // GPT-6 rejects function tools on /v1/chat/completions while reasoning.
+      expect(buildOpenAIModelConfig("gpt-6.1-sol", undefined, 16000, "k").useResponsesApi).toBe(true);
+      expect(buildOpenAIModelConfig("gpt-5.4-mini", undefined, 16000, "k").useResponsesApi).toBe(true);
     });
 
     it("should force temperature=1 for GPT-5", () => {
