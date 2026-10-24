@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-24
+
+### Fixed
+
+- **OpenAI models failed with "Missing credentials".** The ChatOpenAI config passed the key as `openAIApiKey`, which @langchain/openai 1.x no longer reads; it reads `apiKey` (or `OPENAI_API_KEY`). The key now goes in `apiKey`, so graphs no longer need `OPENAI_API_KEY` set to the router token.
+- **GPT-6 with tools failed with 400.** GPT-6 reasons by default and rejects function tools on `/v1/chat/completions` ("Function tools with reasoning_effort are not supported… use /v1/responses"); gpt-6.1-sol cannot turn reasoning off at all. Reasoning models (gpt-5+, gpt-6) now go through the Responses API (`useResponsesApi: true`). OpenAI caches the prompt prefix on its own, so no cache markers are needed. Needs router 0.11.1 to bill these calls: older routers record Responses API calls with zero tokens.
+
 ## [0.7.0] - 2026-10-22
 
 ### Added
