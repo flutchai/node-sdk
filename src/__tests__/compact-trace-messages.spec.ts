@@ -42,7 +42,10 @@ describe("compactTraceMessages", () => {
     const data = compactTraceMessages({ input: messages }) as any;
 
     expect(data.input).toHaveLength(8);
-    expect(data.input[1]).toEqual({ type: "trace_omitted", omittedMessages: 13 });
+    expect(data.input[1]).toEqual({
+      type: "trace_omitted",
+      omittedMessages: 13,
+    });
   });
 
   it("leaves short histories and everything else as is", () => {
