@@ -175,6 +175,63 @@ describe("LangGraphEngine", () => {
       expect(requestBody.messageId).toBe("msg-123");
     });
 
+    it("returns the written answer when the graph hits its recursion limit", async () => {
+      const limit = new Error(
+        "Recursion limit of 24 reached without hitting a stop condition."
+      );
+      limit.name = "GraphRecursionError";
+      const mockGraph = {
+        streamEvents: jest.fn().mockImplementation(async function* () {
+          yield {
+            event: "on_chat_model_stream",
+            data: { chunk: { content: "Answer" } },
+          };
+          throw limit;
+        }),
+      };
+      const config = {
+        input: { messages: [{ content: "test" }] },
+        configurable: {
+          context: {
+            messageId: "msg-123",
+            threadId: "thread-123",
+            userId: "user-123",
+            agentId: "agent-123",
+            companyId: "company-123",
+          },
+        },
+      };
+
+      const result = await engine.streamGraph(mockGraph, config, jest.fn());
+
+      expect(result).toMatchObject({ text: "Test response" });
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.status).toBe("error");
+    });
+
+    it("still throws a recursion limit hit before any answer", async () => {
+      mockEventProcessor.getResult.mockReturnValue({
+        content: { text: "", contentChains: [], attachments: [], metadata: {} },
+        trace: null,
+      });
+      const limit = new Error("Recursion limit of 24 reached");
+      limit.name = "GraphRecursionError";
+      const mockGraph = {
+        streamEvents: jest.fn().mockImplementation(async function* () {
+          yield { event: "on_chain_start", data: {} };
+          throw limit;
+        }),
+      };
+
+      await expect(
+        engine.streamGraph(
+          mockGraph,
+          { input: {}, configurable: {} },
+          jest.fn()
+        )
+      ).rejects.toThrow("Recursion limit");
+    });
+
     it("should capture events before error occurs", async () => {
       // Arrange
       const mockGraph = {
