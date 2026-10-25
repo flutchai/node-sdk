@@ -248,6 +248,7 @@ export class LangGraphEngine implements IGraphEngine {
           agentId: context.agentId || "unknown",
           companyId: context.companyId || "unknown",
           events: trace.events,
+          messages: trace.messages,
           totalEvents: trace.totalEvents,
           startedAt: trace.startedAt,
           completedAt: trace.completedAt || Date.now(),
@@ -348,6 +349,7 @@ export class LangGraphEngine implements IGraphEngine {
     agentId: string;
     companyId: string;
     events: any[];
+    messages: Record<string, unknown>;
     totalEvents: number;
     startedAt: number;
     completedAt: number;
@@ -383,6 +385,7 @@ export class LangGraphEngine implements IGraphEngine {
         durationMs: payload.durationMs,
         status: payload.status || "success",
         error: payload.error,
+        messages: payload.messages,
         events: payload.events.map(event => ({
           timestamp: event.timestamp
             ? new Date(event.timestamp).toISOString()

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-25
+
+### Changed
+
+- **Complete traces at a tenth of the size.** 0.7.2 kept only the first and the last six messages of a history in a trace event, so most steps lost their input. Now each chat message of a run is stored once in the batch's `messages` and the events refer to it as `{ _traceMsg: key }`; the backend (3.3.651+) restores the events whole. An analyst run of 349 events: 84 MB before 0.7.2, 9 MB now, nothing left out. Strings in traces are cut at 100 000 characters again (20 000 in 0.7.2). Needs a backend that accepts `messages` in the trace batch.
+
 ## [0.7.2] - 2026-10-24
 
 ### Fixed
