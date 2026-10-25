@@ -47,6 +47,8 @@ export interface StreamAccumulator {
   attachments: IAttachment[];
   metadata: Record<string, any>;
   traceEvents: IGraphTraceEvent[];
+  /** Chat messages of the trace, each kept once (see refTraceMessages). */
+  traceMessages: TraceMessageStore;
   traceStartedAt: number | null;
   traceCompletedAt: number | null;
 }
@@ -151,6 +153,7 @@ export class EventProcessor {
       attachments: [],
       metadata: {},
       traceEvents: [],
+      traceMessages: { messages: {}, keys: new WeakMap() },
       traceStartedAt: null,
       traceCompletedAt: null,
     };
@@ -705,6 +708,8 @@ export class EventProcessor {
     content: IStoredMessageContent;
     trace: {
       events: IGraphTraceEvent[];
+      /** Messages the events refer to as `{ _traceMsg: key }`. */
+      messages: Record<string, unknown>;
       startedAt: number;
       completedAt: number;
       durationMs: number;
@@ -750,6 +755,7 @@ export class EventProcessor {
       acc.traceEvents.length > 0
         ? {
             events: acc.traceEvents,
+            messages: acc.traceMessages.messages,
             startedAt,
             completedAt,
             durationMs: Math.max(0, completedAt - startedAt),
@@ -796,7 +802,7 @@ export class EventProcessor {
 
   private captureTraceEvent(acc: StreamAccumulator, event: any): void {
     // Normalize the event before storing
-    const normalized = this.normalizeTraceEvent(event);
+    const normalized = this.normalizeTraceEvent(event, acc.traceMessages);
 
     if (!normalized) {
       return; // Skip events that can't be normalized (stream chunks, etc.)
@@ -808,7 +814,10 @@ export class EventProcessor {
     );
   }
 
-  private normalizeTraceEvent(event: any): IGraphTraceEvent | null {
+  private normalizeTraceEvent(
+    event: any,
+    traceMessages: TraceMessageStore
+  ): IGraphTraceEvent | null {
     const type = event?.event ?? event?.type;
     if (!type) {
       return null;
@@ -884,7 +893,7 @@ export class EventProcessor {
       maxStringLength: TRACE_MAX_STRING,
     }) as Record<string, unknown> | undefined;
     const data = sanitizeTraceData(
-      compactTraceMessages(event?.data),
+      refTraceMessages(event?.data, traceMessages),
       0,
       new WeakSet(),
       { maxStringLength: TRACE_MAX_STRING }
@@ -927,33 +936,56 @@ export class EventProcessor {
 }
 
 /**
- * Longest string kept in a trace event. A graph caps a tool result at about
- * this size before the model sees it, so the trace keeps what the model read.
+ * Longest string kept in a trace event. Messages are kept once per trace
+ * (see refTraceMessages), so a system prompt or a tool result stays whole.
  */
-const TRACE_MAX_STRING = 20_000;
-/** Messages kept from the end of a history in a trace event. */
-const TRACE_KEEP_LAST_MESSAGES = 6;
+const TRACE_MAX_STRING = 100_000;
+
+/** Chat messages of one trace and the key of each message object seen. */
+export interface TraceMessageStore {
+  messages: Record<string, unknown>;
+  keys: WeakMap<object, string>;
+}
 
 /**
  * Every chain and model event carries the whole conversation so far; a run of
  * 60 steps sent the history 60 times over (batches of hundreds of MB that
- * stalled the backend). In a trace event a history keeps its first message
- * (the system prompt) and the last few, with a note of how many were left
- * out, wherever it sits: under `messages`, as a chat model's input or as a
- * node's input (a tool-search model gets the bare list). Only the trace is
- * affected, never the run.
+ * stalled the backend). Each message of a history is stored once in the
+ * trace's `messages` (sanitized when first seen) and the event holds
+ * `{ _traceMsg: key }` instead, wherever the history sits: under `messages`,
+ * as a chat model's input or as a node's input (a tool-search model gets the
+ * bare list). A graph passes the same message objects from step to step, so
+ * a message is recognized by identity; the backend restores the events whole.
+ * Only the trace is affected, never the run.
  */
-export function compactTraceMessages(value: unknown, depth = 0): unknown {
+export function refTraceMessages(
+  value: unknown,
+  store: TraceMessageStore,
+  depth = 0
+): unknown {
   if (depth > 6 || value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) {
-    const items = isHistory(value) ? compactHistory(value) : value;
-    return items.map(item => compactTraceMessages(item, depth + 1));
+    if (isHistory(value)) {
+      return value.map(message => ({ _traceMsg: messageKey(message, store) }));
+    }
+    return value.map(item => refTraceMessages(item, store, depth + 1));
   }
   const out: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-    out[key] = compactTraceMessages(item, depth + 1);
+    out[key] = refTraceMessages(item, store, depth + 1);
   }
   return out;
+}
+
+function messageKey(message: object, store: TraceMessageStore): string {
+  const known = store.keys.get(message);
+  if (known) return known;
+  const key = `m${Object.keys(store.messages).length + 1}`;
+  store.keys.set(message, key);
+  store.messages[key] = sanitizeTraceData(message, 0, new WeakSet(), {
+    maxStringLength: TRACE_MAX_STRING,
+  });
+  return key;
 }
 
 /**
@@ -962,7 +994,7 @@ export function compactTraceMessages(value: unknown, depth = 0): unknown {
  */
 function isHistory(items: unknown[]): boolean {
   return (
-    items.length > TRACE_KEEP_LAST_MESSAGES + 2 &&
+    items.length > 0 &&
     items.every(
       item =>
         item !== null &&
@@ -972,15 +1004,4 @@ function isHistory(items: unknown[]): boolean {
           ("content" in item && ("type" in item || "role" in item)))
     )
   );
-}
-
-function compactHistory(messages: unknown[]): unknown[] {
-  const keep = TRACE_KEEP_LAST_MESSAGES + 1;
-  if (messages.length <= keep + 1) return messages;
-  const omitted = messages.length - keep;
-  return [
-    messages[0],
-    { type: "trace_omitted", omittedMessages: omitted },
-    ...messages.slice(-TRACE_KEEP_LAST_MESSAGES),
-  ];
 }

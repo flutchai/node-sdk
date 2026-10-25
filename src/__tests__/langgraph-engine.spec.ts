@@ -29,6 +29,7 @@ describe("LangGraphEngine", () => {
       attachments: [],
       metadata: {},
       traceEvents: [],
+      traceMessages: { messages: {}, keys: new WeakMap() },
       traceStartedAt: Date.now(),
       traceCompletedAt: null,
     };
