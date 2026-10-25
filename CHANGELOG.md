@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-10-25
+
+### Fixed
+
+- **An answer lost when the graph hit its recursion limit.** A graph that wrote its answer and then ran out of steps (adding the reply buttons, say) threw `GraphRecursionError`; the caller retried the run, which resumed from the checkpoint and stored only its last step as the answer — the user got buttons and no text. When the limit is hit after the answer's text is written, `streamGraph` now returns that answer (the trace still records the error). Any other error, or the limit before any text, is thrown as before.
+
 ## [0.7.3] - 2026-10-25
 
 ### Changed

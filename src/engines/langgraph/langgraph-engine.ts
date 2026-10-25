@@ -203,6 +203,17 @@ export class LangGraphEngine implements IGraphEngine {
       hadError: !!streamError,
     });
 
+    // A graph that ran out of steps after writing its answer has answered:
+    // the user already saw the text streamed. Throwing here made the caller
+    // retry the run, which resumed from the checkpoint and stored only its
+    // last step (the buttons) as the answer.
+    if (streamError && isRecursionLimit(streamError) && content?.text?.trim()) {
+      this.logger.warn(
+        `[STREAM-ERROR] Recursion limit reached after the answer was written; returning the answer`
+      );
+      return content;
+    }
+
     // Re-throw the error after sending trace
     if (streamError) {
       throw streamError;
@@ -490,4 +501,12 @@ export class LangGraphEngine implements IGraphEngine {
       },
     };
   }
+}
+
+/** LangGraph's error for a run that hit `recursionLimit`. */
+function isRecursionLimit(error: Error): boolean {
+  return (
+    error.name === "GraphRecursionError" ||
+    /Recursion limit of \d+ reached/.test(error.message)
+  );
 }
