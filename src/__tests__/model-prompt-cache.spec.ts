@@ -392,6 +392,25 @@ describe("reasoning effort in ModelInitializer", () => {
 
     expect(bedrockMock).toHaveBeenCalledTimes(2);
   });
+
+  it("sends the call's effort to an OpenAI reasoning model", async () => {
+    mockFetcher.mockResolvedValue({
+      modelId: "model-openai",
+      modelName: "gpt-6.1-sol",
+      provider: ModelProvider.OPENAI,
+      modelType: ModelType.CHAT,
+      defaultMaxTokens: 16000,
+      requiresApiKey: true,
+      apiToken: "sk-test",
+    });
+
+    await initializer.initializeChatModel({
+      modelId: "model-openai",
+      effort: "low",
+    });
+
+    expect(lastCallConfig(openaiMock).reasoning).toEqual({ effort: "low" });
+  });
 });
 
 describe("prompt caching on the router (Anthropic) path", () => {

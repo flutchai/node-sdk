@@ -229,7 +229,9 @@ export function resolvePromptCacheControl(
 }
 
 /**
- * Reasoning-effort levels accepted by `output_config.effort`.
+ * Reasoning-effort levels accepted by `output_config.effort` on Bedrock and,
+ * for OpenAI reasoning models, by the Responses API `reasoning.effort`
+ * (`max` is sent as `xhigh`, OpenAI's highest).
  *
  * Effort controls how much the model thinks before answering, and thinking
  * tokens are billed as output. Measured on Bedrock (us.anthropic.claude-opus-5,
@@ -383,6 +385,16 @@ export function generateModelCacheKey(
 }
 
 /**
+ * OpenAI's name for an effort level. OpenAI tops out at `xhigh`, so `max`
+ * asks for the most it has.
+ */
+export function toOpenAIEffort(
+  effort: ReasoningEffort
+): "low" | "medium" | "high" | "xhigh" {
+  return effort === "max" ? "xhigh" : effort;
+}
+
+/**
  * Build the constructor config object for a ChatOpenAI instance.
  * Returns different shapes for reasoning models (GPT-5+) vs legacy models.
  *
@@ -400,7 +412,8 @@ export function buildOpenAIModelConfig(
   modelName: string,
   temperature: number | undefined,
   maxTokens: number | undefined,
-  apiToken: string
+  apiToken: string,
+  effort?: ReasoningEffort
 ): Record<string, any> {
   if (isReasoningModel(modelName)) {
     return {
@@ -410,6 +423,9 @@ export function buildOpenAIModelConfig(
       streaming: true,
       useResponsesApi: true,
       apiKey: apiToken,
+      // Responses API `reasoning.effort`. Omitted when unset, so the request
+      // stays what it was and the model keeps its own default.
+      ...(effort && { reasoning: { effort: toOpenAIEffort(effort) } }),
     };
   }
 

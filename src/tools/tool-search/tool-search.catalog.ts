@@ -68,6 +68,18 @@ function shortDescription(description: string): string {
     : `${cut.trimEnd()}…`;
 }
 
+/** What an index line says about a tool: its first sentence, kept short. */
+const INDEX_DESCRIPTION_CHARS = 100;
+
+function indexDescription(description: string): string {
+  const flat = description.replace(/\s+/g, " ").trim();
+  const sentenceEnd = flat.search(/[.!?](\s|$)/);
+  const sentence = sentenceEnd >= 0 ? flat.slice(0, sentenceEnd) : flat;
+  return sentence.length <= INDEX_DESCRIPTION_CHARS
+    ? sentence
+    : `${sentence.slice(0, INDEX_DESCRIPTION_CHARS).trimEnd()}…`;
+}
+
 /**
  * The tools an agent can find but does not see up front, and a BM25 search
  * over their names, descriptions and argument names.
@@ -163,6 +175,20 @@ export class ToolSearchCatalog {
       name: entry.name,
       description: shortDescription(entry.description),
     }));
+  }
+
+  /**
+   * Every tool of the catalog on its own line: its name and the start of its
+   * description. Costs a few tokens per tool instead of a full schema, and
+   * lets the model ask for a tool by its exact name.
+   */
+  index(): string {
+    return this.entries
+      .map(entry => {
+        const brief = indexDescription(entry.description);
+        return brief ? `- ${entry.name}: ${brief}` : `- ${entry.name}`;
+      })
+      .join("\n");
   }
 
   /**

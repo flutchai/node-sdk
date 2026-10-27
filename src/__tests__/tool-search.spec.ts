@@ -170,6 +170,31 @@ describe("ToolSearchCatalog", () => {
   it("summarises what it covers by name prefix, in a stable order", () => {
     expect(catalog.summary()).toBe("funnel_*, recipe_*, rl_* (10)");
   });
+
+  it("lists every tool with the first sentence of its description", () => {
+    const lines = catalog.index().split("\n");
+
+    expect(lines).toHaveLength(catalog.size);
+    expect(lines.every(line => /^- \w+(: [^\n]+)?$/.test(line))).toBe(true);
+    expect(lines.every(line => line.length <= 2 + 40 + 2 + 101)).toBe(true);
+  });
+});
+
+describe("search_tools description", () => {
+  it("names the tool groups by default", () => {
+    const tool = createToolSearchTool(new ToolSearchCatalog(TOOLS));
+
+    expect(tool.description).toContain("rl_* (10)");
+    expect(tool.description).not.toContain("- rl_");
+  });
+
+  it("carries the index of every tool when asked", () => {
+    const catalog = new ToolSearchCatalog(TOOLS);
+    const tool = createToolSearchTool(catalog, 5, true);
+
+    expect(tool.description).toContain(catalog.index());
+    expect(tool.description).toContain("exact names");
+  });
 });
 
 describe("search results in the history", () => {

@@ -234,12 +234,14 @@ export class ModelInitializer implements IModelInitializer {
       defaultMaxTokens,
       apiToken,
       baseURL,
+      defaultEffort,
     }) => {
       const config = buildOpenAIModelConfig(
         modelName,
         defaultTemperature,
         defaultMaxTokens,
-        apiToken || this.resolveApiKey(ModelProvider.OPENAI) || ""
+        apiToken || this.resolveApiKey(ModelProvider.OPENAI) || "",
+        defaultEffort
       );
       const routerURL = resolveRouterURL(baseURL);
       if (routerURL) {
@@ -568,6 +570,7 @@ export class ModelInitializer implements IModelInitializer {
         toOptionalNumber(config.maxTokens) ??
         toOptionalNumber(modelConfig.defaultMaxTokens),
       baseURL: config.baseURL ?? modelConfig.baseURL,
+      defaultEffort: config.effort ?? modelConfig.defaultEffort,
     };
 
     // Prompt caching. Resolved once from every name the model is known by, and
@@ -769,7 +772,11 @@ export class ModelInitializer implements IModelInitializer {
             model,
             core: [...core, ...(customTools ?? [])],
             deferred,
-            searchTool: createToolSearchTool(catalog, maxResults),
+            searchTool: createToolSearchTool(
+              catalog,
+              maxResults,
+              toolSearch.options.index === true
+            ),
             mode,
             bindOptions: promptCacheControl ? boundOptions : undefined,
           }) as Runnable<
