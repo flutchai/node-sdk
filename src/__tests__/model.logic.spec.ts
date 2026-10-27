@@ -144,6 +144,54 @@ describe("model.logic", () => {
   });
 
   describe("buildOpenAIModelConfig", () => {
+    it("sends the reasoning effort to a reasoning model", () => {
+      const config = buildOpenAIModelConfig(
+        "gpt-6.1-sol",
+        undefined,
+        16000,
+        "sk-test",
+        "low"
+      );
+
+      expect(config.reasoning).toEqual({ effort: "low" });
+      expect(config.useResponsesApi).toBe(true);
+    });
+
+    it("sends max as OpenAI's highest effort", () => {
+      const config = buildOpenAIModelConfig(
+        "gpt-6.1-sol",
+        undefined,
+        16000,
+        "sk-test",
+        "max"
+      );
+
+      expect(config.reasoning).toEqual({ effort: "xhigh" });
+    });
+
+    it("leaves the reasoning out when no effort is given", () => {
+      const config = buildOpenAIModelConfig(
+        "gpt-6.1-sol",
+        undefined,
+        16000,
+        "sk-test"
+      );
+
+      expect(config).not.toHaveProperty("reasoning");
+    });
+
+    it("does not send an effort to a legacy model", () => {
+      const config = buildOpenAIModelConfig(
+        "gpt-4o",
+        0.7,
+        4096,
+        "sk-test",
+        "low"
+      );
+
+      expect(config).not.toHaveProperty("reasoning");
+    });
+
     it("should use maxTokens for legacy models", () => {
       const config = buildOpenAIModelConfig("gpt-4o", 0.7, 4096, "sk-test");
 

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-10-27
+
+### Added
+
+- **Reasoning effort for OpenAI reasoning models.** `effort` (per call or the model's default) is now sent as the Responses API `reasoning.effort`; `max` goes out as `xhigh`, OpenAI's highest. Unset — the request is unchanged and the model keeps its own default. Legacy models get no effort.
+- **`toolSearch.index`.** When set, the `search_tools` description lists every searchable tool with the first sentence of its description (≤100 characters) instead of only the name groups, so the model can ask for exact names and find the right tool in one search. Part of the cached prefix; off by default.
+
 ## [0.7.4] - 2026-10-25
 
 ### Fixed

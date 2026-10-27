@@ -84,7 +84,8 @@ export interface ModelByIdConfig {
   /** TTL of the cache checkpoints. Defaults to Bedrock's 5 minutes. */
   promptCacheTtl?: PromptCacheTtl;
   /**
-   * Reasoning effort for this call (Bedrock Converse `output_config.effort`).
+   * Reasoning effort for this call: Bedrock Converse `output_config.effort`,
+   * or `reasoning.effort` for OpenAI reasoning models (Responses API).
    * Absent — the model's own default (`high` on Claude Opus 5).
    */
   effort?: ReasoningEffort;

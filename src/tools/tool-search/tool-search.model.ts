@@ -27,6 +27,13 @@ export interface ToolSearchOptions {
    * as before. Default 15.
    */
   minTools?: number;
+  /**
+   * List every tool found by search in the `search_tools` description — its
+   * name and first sentence — instead of only the name groups. A few tokens
+   * per tool, part of the cached prefix; the model then asks for exact names
+   * and finds the right tool in one search. Off unless set.
+   */
+  index?: boolean;
 }
 
 export const DEFAULT_TOOL_SEARCH_RESULTS = 5;
@@ -88,15 +95,21 @@ export function splitTools(
  */
 export function createToolSearchTool(
   catalog: ToolSearchCatalog,
-  maxResults = DEFAULT_TOOL_SEARCH_RESULTS
+  maxResults = DEFAULT_TOOL_SEARCH_RESULTS,
+  index = false
 ): DynamicStructuredTool {
+  const covered = index
+    ? `${catalog.size} more are found by search:\n${catalog.index()}\n`
+    : `${catalog.size} more are found by search: ${catalog.summary()}. `;
   return new DynamicStructuredTool({
     name: TOOL_SEARCH_NAME,
     description:
-      `Find more tools. You see only some of your tools; ${catalog.size} more are found by search: ` +
-      `${catalog.summary()}. ` +
-      'Describe the task in a few words (what to do and with what, e.g. "customer review quotes by theme"), ' +
-      "or give exact tool names. Found tools become callable right away and stay available for the rest of the conversation. " +
+      `Find more tools. You see only some of your tools; ${covered}` +
+      (index
+        ? "Give the exact names of the tools you need, separated by commas, or describe the task in a few words. "
+        : 'Describe the task in a few words (what to do and with what, e.g. "customer review quotes by theme"), ' +
+          "or give exact tool names. ") +
+      "Found tools become callable right away and stay available for the rest of the conversation. " +
       "Search before saying you cannot do something.",
     schema: z.object({
       query: z
