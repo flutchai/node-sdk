@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-10-28
+
+### Fixed
+
+- **A slow mcp-runtime left the model without tools.** `McpToolFilter` fetched the tools' list and schemas with a 5-second timeout and returned no tools on a timeout; with ~100 tools, some on remote MCP servers, and several graph runs starting at once, the fetch ran past it and the run went on with the graph's own tools only. The timeout is now 20 seconds and configurable with `MCP_RUNTIME_TIMEOUT_MS`.
+
 ## [0.7.5] - 2026-10-27
 
 ### Added

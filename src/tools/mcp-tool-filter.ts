@@ -9,6 +9,16 @@ import { IAgentToolConfig } from "./config";
  * Utility for fetching and filtering MCP tools from runtime
  * Provides efficient tool filtering and conversion to LangChain tools
  */
+/**
+ * How long a request to mcp-runtime for the tools' list or schemas may take.
+ * Building the schemas of a few dozen tools, some of them on remote MCP
+ * servers, ran past the old 5 seconds when several graph runs started at
+ * once — and a timed-out fetch returns no tools, so the model ran without
+ * any. `MCP_RUNTIME_TIMEOUT_MS` overrides the default.
+ */
+const MCP_RUNTIME_TIMEOUT_MS =
+  Number(process.env.MCP_RUNTIME_TIMEOUT_MS) || 20_000;
+
 export class McpToolFilter {
   private readonly logger = new Logger(McpToolFilter.name);
   private readonly mcpConverter: McpConverter;
@@ -56,7 +66,7 @@ export class McpToolFilter {
         `${this.mcpRuntimeUrl}/tools/schemas`,
         requestBody,
         {
-          timeout: 5000,
+          timeout: MCP_RUNTIME_TIMEOUT_MS,
           headers: {
             "Content-Type": "application/json",
           },
@@ -127,7 +137,7 @@ export class McpToolFilter {
   async getAllTools(): Promise<StructuredTool[]> {
     try {
       const response = await axios.get(`${this.mcpRuntimeUrl}/tools/list`, {
-        timeout: 5000,
+        timeout: MCP_RUNTIME_TIMEOUT_MS,
       });
 
       const allTools: McpTool[] = Array.isArray(response.data)
@@ -192,7 +202,7 @@ export class McpToolFilter {
   async getAvailableToolNames(): Promise<string[]> {
     try {
       const response = await axios.get(`${this.mcpRuntimeUrl}/tools/list`, {
-        timeout: 5000,
+        timeout: MCP_RUNTIME_TIMEOUT_MS,
       });
 
       const tools: McpTool[] = Array.isArray(response.data)
