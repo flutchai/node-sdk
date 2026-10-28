@@ -1,4 +1,5 @@
 import { NestFactory } from "@nestjs/core";
+import { json, urlencoded } from "express";
 import { Logger, ValidationPipe } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import * as net from "net";
@@ -199,13 +200,21 @@ async function registerWithServiceDiscovery(
  */
 export async function bootstrap(
   AppModule: any,
-  options: { port?: number; globalPrefix?: string } = {}
+  options: { port?: number; globalPrefix?: string; bodyLimit?: string } = {}
 ) {
   // Setup Redis mock for development (must be called before any module imports)
   setupRedisMock();
 
   const app = await NestFactory.create(AppModule);
   const logger = new Logger("Bootstrap");
+
+  // A graph's request carries another agent's whole task — fact sheets, the
+  // rows of their tables, a skill's text — and Nest's default limit of 100 KB
+  // refused such requests as PayloadTooLargeError. The limit is an option, or
+  // GRAPH_BODY_LIMIT, or 10 MB.
+  const bodyLimit = options.bodyLimit || process.env.GRAPH_BODY_LIMIT || "10mb";
+  app.use(json({ limit: bodyLimit }));
+  app.use(urlencoded({ limit: bodyLimit, extended: true }));
 
   // Configuration
   const requestedPort =

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.7] - 2026-10-28
+
+### Fixed
+
+- **A graph refused large tasks.** `bootstrap()` left Nest's default request body limit of 100 KB, and a task that carries another agent's fact sheets and tables came back as `PayloadTooLargeError`. The limit is now 10 MB, set with the `bodyLimit` option or `GRAPH_BODY_LIMIT`.
+
 ## [0.7.6] - 2026-10-28
 
 ### Fixed
