@@ -16,7 +16,8 @@ import { IAgentToolConfig } from "./config";
  * once — and a timed-out fetch returns no tools, so the model ran without
  * any. `MCP_RUNTIME_TIMEOUT_MS` overrides the default.
  */
-const MCP_RUNTIME_TIMEOUT_MS = Number(process.env.MCP_RUNTIME_TIMEOUT_MS) || 20_000;
+const MCP_RUNTIME_TIMEOUT_MS =
+  Number(process.env.MCP_RUNTIME_TIMEOUT_MS) || 20_000;
 
 export class McpToolFilter {
   private readonly logger = new Logger(McpToolFilter.name);
