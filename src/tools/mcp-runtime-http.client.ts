@@ -62,7 +62,8 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
     name: string,
     args: any,
     context?: any,
-    mcpServers?: Record<string, any>[]
+    mcpServers?: Record<string, any>[],
+    signal?: AbortSignal
   ): Promise<ToolExecutionResult> {
     try {
       this.logger.debug(`Executing tool: ${name} with args:`, args);
@@ -83,7 +84,12 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
         payload.mcpServers = mcpServers;
       }
 
-      const response = await this.httpClient.post("/tools/execute", payload);
+      // The run's signal: a cancelled run drops its tool call, and mcp-runtime
+      // then drops what it started for it (an agent called with call_agent goes
+      // on, and is billed, otherwise).
+      const response = signal
+        ? await this.httpClient.post("/tools/execute", payload, { signal })
+        : await this.httpClient.post("/tools/execute", payload);
 
       this.logger.log(`Tool ${name} executed successfully`);
       return response.data;
@@ -179,7 +185,8 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
         toolName,
         enrichedArgs,
         executionContext,
-        mcpServers
+        mcpServers,
+        config?.signal
       );
 
       // Create content (stringified for ToolMessage)
