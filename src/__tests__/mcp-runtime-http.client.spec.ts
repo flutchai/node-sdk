@@ -150,5 +150,24 @@ describe("McpRuntimeHttpClient", () => {
       expect(response.success).toBe(true);
       expect(response.rawResult).toBe("plain text response");
     });
+
+    it("drops the tool call with the run: the run's signal goes to the request", async () => {
+      mockHttp.post.mockResolvedValue({ data: { success: true, result: "r" } });
+      const run = new AbortController();
+
+      await client.executeToolWithEvents(
+        "call_sig",
+        "call_agent",
+        { agentSlug: "a" },
+        {},
+        { signal: run.signal }
+      );
+
+      expect(mockHttp.post).toHaveBeenCalledWith(
+        "/tools/execute",
+        { name: "call_agent", arguments: { agentSlug: "a" }, context: {} },
+        { signal: run.signal }
+      );
+    });
   });
 });

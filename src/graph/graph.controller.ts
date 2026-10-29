@@ -76,8 +76,10 @@ export class GraphController {
   @ApiOperation({ summary: "Generate answer (non-streaming)" })
   @ApiResponse({ status: 200, description: "Answer generated" })
   async generateAnswer(
-    @Body() payload: IGraphRequestPayload
+    @Body() payload: IGraphRequestPayload,
+    @Res({ passthrough: true }) res: Response
   ): Promise<IGraphResponsePayload> {
+    this.cancelOnDisconnect(res, payload.requestId);
     try {
       return await this.graphService.generateAnswer(payload);
     } catch (error) {
@@ -100,6 +102,7 @@ export class GraphController {
     res.setHeader("Transfer-Encoding", "chunked");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+    this.cancelOnDisconnect(res, payload.requestId);
 
     try {
       this.logger.debug(
@@ -141,6 +144,28 @@ export class GraphController {
       res.write(`data: ${JSON.stringify({ message: error.message })}\n\n`);
       res.end();
     }
+  }
+
+  /**
+   * A caller that hangs up before the answer is done — its own timeout, a
+   * restart, a cancelled parent run — no longer waits for it, so the run is
+   * cancelled: left going, it keeps calling models and tools nobody reads.
+   */
+  private cancelOnDisconnect(res: Response, requestId?: string): void {
+    if (!requestId) return;
+    res.on("close", () => {
+      if (res.writableFinished) return;
+      this.logger.warn(
+        `[CONTROLLER] Caller disconnected before the answer: cancelling ${requestId}`
+      );
+      this.graphService
+        .cancelGeneration(requestId)
+        .catch(error =>
+          this.logger.warn(
+            `[CONTROLLER] Cancel after disconnect failed for ${requestId}: ${error.message}`
+          )
+        );
+    });
   }
 
   @Post("cancel/:requestId")

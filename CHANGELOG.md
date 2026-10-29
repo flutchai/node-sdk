@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8] - 2026-10-29
+
+### Fixed
+
+- **A run went on after its caller had gone.** `/stream` and `/generate` now cancel the run when the caller hangs up before the answer (its own timeout, a restart, a cancelled parent run); left going, it kept calling models and tools nobody would read, and an agent called by another one was billed in full.
+- **A cancelled run left its tool calls running.** `McpRuntimeHttpClient.executeToolWithEvents` passes the run's signal (`config.signal`) to the request, and `executeTool` takes one, so a cancelled run drops its in-flight calls — and mcp-runtime what it started for them, such as another agent's run.
+
 ## [0.7.7] - 2026-10-28
 
 ### Fixed
