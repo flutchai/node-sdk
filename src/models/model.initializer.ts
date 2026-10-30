@@ -286,7 +286,8 @@ export class ModelInitializer implements IModelInitializer {
         // Bedrock's InvokeModel schema behind it.
         ...(promptCacheControl && { cache_control: promptCacheControl }),
         // The thinking mode as the API's own parameter; absent when unset.
-        ...(defaultThinking && ({ thinking: { type: defaultThinking } } as Record<string, unknown>)),
+        ...(defaultThinking &&
+          ({ thinking: { type: defaultThinking } } as Record<string, unknown>)),
         anthropicApiKey:
           apiToken || this.resolveApiKey(ModelProvider.ANTHROPIC),
         ...(routerURL && { anthropicApiUrl: routerURL }),

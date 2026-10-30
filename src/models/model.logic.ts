@@ -284,7 +284,10 @@ export function buildReasoningRequestFields(
   effort?: ReasoningEffort,
   thinking?: ThinkingMode
 ):
-  | { output_config?: { effort: ReasoningEffort }; thinking?: { type: ThinkingMode } }
+  | {
+      output_config?: { effort: ReasoningEffort };
+      thinking?: { type: ThinkingMode };
+    }
   | undefined {
   if (!effort && !thinking) return undefined;
   return {
