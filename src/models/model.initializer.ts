@@ -36,7 +36,7 @@ import {
   normalizeToolConfigs,
   resolveSamplingParams,
   resolvePromptCacheControl,
-  buildEffortRequestFields,
+  buildReasoningRequestFields,
   toOptionalNumber,
 } from "./model.logic";
 import type { PromptCacheControl } from "./model.logic";
@@ -218,10 +218,15 @@ export class ModelInitializer implements IModelInitializer {
       config.effort === undefined
         ? withCache
         : `${withCache}:eff:${config.effort}`;
+    // The thinking mode is a request field the same way. Absent → key unchanged.
+    const withThinking =
+      config.thinking === undefined
+        ? withEffort
+        : `${withEffort}:th:${config.thinking}`;
     // Tool search binds a different tool set. Off → key unchanged.
     return config.toolSearch?.enabled
-      ? `${withEffort}:ts:${JSON.stringify(config.toolSearch)}`
-      : withEffort;
+      ? `${withThinking}:ts:${JSON.stringify(config.toolSearch)}`
+      : withThinking;
   }
 
   // Chat model creators
@@ -256,7 +261,14 @@ export class ModelInitializer implements IModelInitializer {
     },
 
     [ModelProvider.ANTHROPIC]: (
-      { modelName, defaultTemperature, defaultMaxTokens, apiToken, baseURL },
+      {
+        modelName,
+        defaultTemperature,
+        defaultMaxTokens,
+        apiToken,
+        baseURL,
+        defaultThinking,
+      },
       promptCacheControl
     ) => {
       const routerURL = resolveRouterURL(baseURL);
@@ -273,6 +285,8 @@ export class ModelInitializer implements IModelInitializer {
         // (which forwards the Anthropic body untouched) and is accepted by
         // Bedrock's InvokeModel schema behind it.
         ...(promptCacheControl && { cache_control: promptCacheControl }),
+        // The thinking mode as the API's own parameter; absent when unset.
+        ...(defaultThinking && ({ thinking: { type: defaultThinking } } as Record<string, unknown>)),
         anthropicApiKey:
           apiToken || this.resolveApiKey(ModelProvider.ANTHROPIC),
         ...(routerURL && { anthropicApiUrl: routerURL }),
@@ -571,6 +585,7 @@ export class ModelInitializer implements IModelInitializer {
         toOptionalNumber(modelConfig.defaultMaxTokens),
       baseURL: config.baseURL ?? modelConfig.baseURL,
       defaultEffort: config.effort ?? modelConfig.defaultEffort,
+      defaultThinking: config.thinking ?? modelConfig.defaultThinking,
     };
 
     // Prompt caching. Resolved once from every name the model is known by, and
@@ -601,8 +616,10 @@ export class ModelInitializer implements IModelInitializer {
       // Reasoning effort travels as a provider-specific request field. Key
       // omitted entirely when unset, so the request is byte-identical to what
       // it was before — which also keeps the prompt cache warm.
-      const effortFields = buildEffortRequestFields(
-        config.effort ?? modelConfig.defaultEffort
+      // The thinking mode rides in the same field (`thinking.type`).
+      const effortFields = buildReasoningRequestFields(
+        config.effort ?? modelConfig.defaultEffort,
+        config.thinking ?? modelConfig.defaultThinking
       );
 
       model = new FlutchChatBedrockConverse({

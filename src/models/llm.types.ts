@@ -9,7 +9,7 @@ import type { ToolSearchOptions } from "../tools/tool-search";
 import { Runnable } from "@langchain/core/runnables";
 import { BaseLanguageModelInput } from "@langchain/core/language_models/base";
 import { AIMessageChunk } from "@langchain/core/messages";
-import { PromptCacheTtl, ReasoningEffort } from "./model.logic";
+import { PromptCacheTtl, ReasoningEffort, ThinkingMode } from "./model.logic";
 
 // ── New: direct model initialization by provider + name ──
 
@@ -89,6 +89,13 @@ export interface ModelByIdConfig {
    * Absent — the model's own default (`high` on Claude Opus 5).
    */
   effort?: ReasoningEffort;
+  /**
+   * Whether the model thinks before answering: Bedrock Converse
+   * `thinking.type`, or the Anthropic API's `thinking`. `between_tools` turns
+   * Claude 5's thinking off (it rejects `disabled`). Absent — the model's own
+   * default (adaptive thinking on Claude 5).
+   */
+  thinking?: ThinkingMode;
 }
 
 // Simple fetcher function type - only modelId parameter
@@ -128,6 +135,8 @@ export interface ModelConfigWithToken {
   promptCacheTtl?: PromptCacheTtl;
   /** Optional catalog default for the reasoning effort. */
   defaultEffort?: ReasoningEffort;
+  /** Optional catalog default for the thinking mode. */
+  defaultThinking?: ThinkingMode;
   /** Optional custom base URL for the LLM provider (e.g. self-hosted gateway). Falls back to FLUTCH_ROUTER_URL env or https://router.flutch.ai */
   baseURL?: string;
 }

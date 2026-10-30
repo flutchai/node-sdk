@@ -262,6 +262,37 @@ export function buildEffortRequestFields(
   return effort ? { output_config: { effort } } : undefined;
 }
 
+/**
+ * Whether the model thinks before it answers (Anthropic `thinking.type`).
+ *
+ * Claude 5 thinks adaptively by default, at any effort: `low` makes it think
+ * less, never not at all — a report writer at `low` still spent 50–85% of its
+ * output tokens on thinking (29.10.2026). `between_tools` is how Claude 5 turns
+ * it off: no thinking before a response, only short updates between tool calls
+ * (they come back as thinking blocks). `disabled` is the older models' word —
+ * Claude 5 rejects it and names `between_tools` instead. `adaptive` is the
+ * model's own default, said explicitly.
+ */
+export type ThinkingMode = "adaptive" | "between_tools" | "disabled";
+
+/**
+ * The Converse `additionalModelRequestFields` for the effort and the thinking
+ * mode, or `undefined` when neither is set — the request stays byte-identical
+ * to an agent that sets nothing, which keeps its prompt cache warm.
+ */
+export function buildReasoningRequestFields(
+  effort?: ReasoningEffort,
+  thinking?: ThinkingMode
+):
+  | { output_config?: { effort: ReasoningEffort }; thinking?: { type: ThinkingMode } }
+  | undefined {
+  if (!effort && !thinking) return undefined;
+  return {
+    ...(effort && { output_config: { effort } }),
+    ...(thinking && { thinking: { type: thinking } }),
+  };
+}
+
 export interface SamplingParams {
   temperature?: number;
   topP?: number;

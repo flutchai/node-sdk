@@ -84,6 +84,7 @@ import { ModelProvider, ModelType } from "../models/enums";
 import { ModelConfigWithTokenAndType } from "../models/model.interface";
 import {
   buildEffortRequestFields,
+  buildReasoningRequestFields,
   modelSupportsPromptCache,
   resolvePromptCacheControl,
 } from "../models/model.logic";
@@ -332,6 +333,72 @@ describe("buildEffortRequestFields", () => {
 
   it("returns undefined when no effort is configured", () => {
     expect(buildEffortRequestFields()).toBeUndefined();
+  });
+});
+
+describe("buildReasoningRequestFields", () => {
+  it("carries the effort and the thinking mode in one payload", () => {
+    expect(buildReasoningRequestFields("low", "between_tools")).toEqual({
+      output_config: { effort: "low" },
+      thinking: { type: "between_tools" },
+    });
+    expect(buildReasoningRequestFields(undefined, "between_tools")).toEqual({ thinking: { type: "between_tools" } });
+    expect(buildReasoningRequestFields("medium")).toEqual({ output_config: { effort: "medium" } });
+  });
+
+  it("returns undefined when neither is set", () => {
+    expect(buildReasoningRequestFields()).toBeUndefined();
+  });
+});
+
+describe("thinking mode in ModelInitializer", () => {
+  let initializer: ModelInitializer;
+  let mockFetcher: jest.Mock;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockFetcher = jest.fn();
+    initializer = new ModelInitializer(mockFetcher);
+  });
+
+  it("sends the call's thinking mode next to its effort on Bedrock", async () => {
+    mockFetcher.mockResolvedValue(makeBedrockConfig());
+
+    await initializer.initializeChatModel({ modelId: "model-bedrock", effort: "low", thinking: "between_tools" });
+
+    expect(lastCallConfig(bedrockMock).additionalModelRequestFields).toEqual({
+      output_config: { effort: "low" },
+      thinking: { type: "between_tools" },
+    });
+  });
+
+  it("sends the catalog's default thinking mode", async () => {
+    mockFetcher.mockResolvedValue(makeBedrockConfig({ defaultThinking: "between_tools" }));
+
+    await initializer.initializeChatModel({ modelId: "model-bedrock" });
+
+    expect(lastCallConfig(bedrockMock).additionalModelRequestFields).toEqual({ thinking: { type: "between_tools" } });
+  });
+
+  it("keeps instances with different thinking modes apart in the cache", async () => {
+    mockFetcher.mockResolvedValue(makeBedrockConfig());
+
+    await initializer.initializeChatModel({ modelId: "model-bedrock", effort: "low" });
+    await initializer.initializeChatModel({ modelId: "model-bedrock", effort: "low", thinking: "between_tools" });
+
+    expect(bedrockMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("passes the thinking mode to the Anthropic client on the router path, and nothing when unset", async () => {
+    const anthropicMock = ChatAnthropic as unknown as jest.Mock;
+    const router = { modelId: "model-router", modelName: "claude-sonnet-5-5", provider: ModelProvider.ANTHROPIC, modelType: ModelType.CHAT, defaultMaxTokens: 8192, requiresApiKey: true };
+    mockFetcher.mockResolvedValue(router);
+
+    await initializer.initializeChatModel({ modelId: "model-router", thinking: "between_tools" });
+    expect(lastCallConfig(anthropicMock).thinking).toEqual({ type: "between_tools" });
+
+    await initializer.initializeChatModel({ modelId: "model-router" });
+    expect(lastCallConfig(anthropicMock)).not.toHaveProperty("thinking");
   });
 });
 

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.9] - 2026-10-30
+
+### Added
+
+- **The thinking mode of a model: `thinking`** (`ModelByIdConfig.thinking`, catalog `defaultThinking`): `adaptive`, `between_tools` or `disabled`, sent as Bedrock Converse `thinking.type` next to `output_config.effort`, and as the Anthropic client's `thinking` on the router path. Claude 5 thinks adaptively at any effort — `low` only shortens it: a report writer at `low` spent 50–85% of its output tokens on thinking. `between_tools` is how Claude 5 turns it off (no thinking before a response, short updates between tool calls); it rejects `disabled`, the older models' word. Unset — the request is unchanged, and so is the cache key.
+
 ## [0.7.8] - 2026-10-29
 
 ### Fixed
