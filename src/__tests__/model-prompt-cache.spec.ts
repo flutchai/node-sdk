@@ -85,6 +85,7 @@ import { ModelConfigWithTokenAndType } from "../models/model.interface";
 import {
   buildEffortRequestFields,
   buildReasoningRequestFields,
+  mergeRequestFields,
   modelSupportsPromptCache,
   resolvePromptCacheControl,
 } from "../models/model.logic";
@@ -93,7 +94,9 @@ const bedrockMock = ChatBedrockConverse as unknown as jest.Mock;
 const openaiMock = ChatOpenAI as unknown as jest.Mock;
 
 /** Last config object a mocked provider constructor was called with. */
-function lastCallConfig(mock: jest.Mock): Record<string, unknown> {
+function lastCallConfig(mock: {
+  mock: { calls: any[][] };
+}): Record<string, unknown> {
   expect(mock).toHaveBeenCalled();
   return mock.mock.calls[mock.mock.calls.length - 1][0];
 }
@@ -430,6 +433,120 @@ describe("thinking mode in ModelInitializer", () => {
 
     await initializer.initializeChatModel({ modelId: "model-router" });
     expect(lastCallConfig(anthropicMock)).not.toHaveProperty("thinking");
+  });
+});
+
+describe("mergeRequestFields", () => {
+  it("merges objects key by key and replaces arrays and scalars", () => {
+    expect(
+      mergeRequestFields(
+        {
+          thinking: { type: "adaptive" },
+          output_config: { effort: "low" },
+          stop: ["a"],
+        },
+        { thinking: { display: "summarized" }, stop: ["b"], top_k: 5 }
+      )
+    ).toEqual({
+      thinking: { type: "adaptive", display: "summarized" },
+      output_config: { effort: "low" },
+      stop: ["b"],
+      top_k: 5,
+    });
+  });
+
+  it("gives the base back when nothing is passed through, and the fields alone without a base", () => {
+    const base = { thinking: { type: "adaptive" } };
+    expect(mergeRequestFields(base, undefined)).toBe(base);
+    expect(mergeRequestFields(base, {})).toBe(base);
+    expect(mergeRequestFields(undefined, { a: 1 })).toEqual({ a: 1 });
+    expect(mergeRequestFields()).toBeUndefined();
+  });
+});
+
+describe("request fields in ModelInitializer", () => {
+  let initializer: ModelInitializer;
+  let mockFetcher: jest.Mock;
+  const router = {
+    modelId: "model-router",
+    modelName: "claude-sonnet-5-5",
+    provider: ModelProvider.ANTHROPIC,
+    modelType: ModelType.CHAT,
+    defaultMaxTokens: 8192,
+    requiresApiKey: true,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockFetcher = jest.fn();
+    initializer = new ModelInitializer(mockFetcher);
+  });
+
+  it("merges them over the effort and the thinking mode on Bedrock", async () => {
+    mockFetcher.mockResolvedValue(makeBedrockConfig());
+
+    await initializer.initializeChatModel({
+      modelId: "model-bedrock",
+      effort: "low",
+      thinking: "adaptive",
+      requestFields: { thinking: { display: "summarized" } },
+    });
+
+    expect(lastCallConfig(bedrockMock).additionalModelRequestFields).toEqual({
+      output_config: { effort: "low" },
+      thinking: { type: "adaptive", display: "summarized" },
+    });
+  });
+
+  it("gives the Anthropic client thinking and output_config as its own options, every other field in the body", async () => {
+    const anthropicMock = jest.mocked(ChatAnthropic);
+    mockFetcher.mockResolvedValue(router);
+
+    await initializer.initializeChatModel({
+      modelId: "model-router",
+      thinking: "adaptive",
+      requestFields: {
+        thinking: { display: "summarized" },
+        output_config: { effort: "low" },
+        inference_geo: "us",
+      },
+    });
+
+    const config = lastCallConfig(anthropicMock);
+    expect(config.thinking).toEqual({
+      type: "adaptive",
+      display: "summarized",
+    });
+    expect(config.outputConfig).toEqual({ effort: "low" });
+    expect(config.invocationKwargs).toEqual({ inference_geo: "us" });
+  });
+
+  it("leaves the Anthropic client as it was when none are set", async () => {
+    const anthropicMock = jest.mocked(ChatAnthropic);
+    mockFetcher.mockResolvedValue(router);
+
+    await initializer.initializeChatModel({ modelId: "model-router" });
+
+    const config = lastCallConfig(anthropicMock);
+    expect(config).not.toHaveProperty("thinking");
+    expect(config).not.toHaveProperty("outputConfig");
+    expect(config).not.toHaveProperty("invocationKwargs");
+  });
+
+  it("keeps instances with different request fields apart in the cache", async () => {
+    mockFetcher.mockResolvedValue(makeBedrockConfig());
+
+    await initializer.initializeChatModel({ modelId: "model-bedrock" });
+    await initializer.initializeChatModel({
+      modelId: "model-bedrock",
+      requestFields: { thinking: { display: "summarized" } },
+    });
+    await initializer.initializeChatModel({
+      modelId: "model-bedrock",
+      requestFields: { thinking: { display: "summarized" } },
+    });
+
+    expect(bedrockMock).toHaveBeenCalledTimes(2);
   });
 });
 

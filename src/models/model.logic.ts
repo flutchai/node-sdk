@@ -296,6 +296,34 @@ export function buildReasoningRequestFields(
   };
 }
 
+/** Provider request-body fields passed through from an agent's config. */
+export type RequestFields = Record<string, unknown>;
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+/**
+ * `extra` over `base`, objects merged key by key (arrays and scalars replace),
+ * so a passed-through `thinking: { display }` keeps the SDK's `thinking.type`.
+ * Neither set → `undefined`, which leaves the request byte-identical.
+ */
+export function mergeRequestFields(
+  base?: RequestFields,
+  extra?: RequestFields
+): RequestFields | undefined {
+  if (!extra || Object.keys(extra).length === 0) return base;
+  if (!base) return { ...extra };
+  const merged: RequestFields = { ...base };
+  for (const [key, value] of Object.entries(extra)) {
+    const current = merged[key];
+    merged[key] =
+      isPlainObject(current) && isPlainObject(value)
+        ? mergeRequestFields(current, value)
+        : value;
+  }
+  return merged;
+}
+
 export interface SamplingParams {
   temperature?: number;
   topP?: number;

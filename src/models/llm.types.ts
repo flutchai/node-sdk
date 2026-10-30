@@ -9,7 +9,12 @@ import type { ToolSearchOptions } from "../tools/tool-search";
 import { Runnable } from "@langchain/core/runnables";
 import { BaseLanguageModelInput } from "@langchain/core/language_models/base";
 import { AIMessageChunk } from "@langchain/core/messages";
-import { PromptCacheTtl, ReasoningEffort, ThinkingMode } from "./model.logic";
+import {
+  PromptCacheTtl,
+  ReasoningEffort,
+  RequestFields,
+  ThinkingMode,
+} from "./model.logic";
 
 // ── New: direct model initialization by provider + name ──
 
@@ -96,6 +101,15 @@ export interface ModelByIdConfig {
    * default (adaptive thinking on Claude 5).
    */
   thinking?: ThinkingMode;
+  /**
+   * Fields of the provider's own request body, sent as given — a parameter
+   * the SDK has no option for needs no SDK release. Objects merge into what
+   * the SDK sets: `{ thinking: { display: "summarized" } }` keeps the
+   * `thinking.type` from `thinking`. Bedrock Converse:
+   * `additionalModelRequestFields`; Anthropic: the Messages body; OpenAI: the
+   * Chat Completions / Responses body. Absent — the request is unchanged.
+   */
+  requestFields?: RequestFields;
 }
 
 // Simple fetcher function type - only modelId parameter
@@ -137,6 +151,8 @@ export interface ModelConfigWithToken {
   defaultEffort?: ReasoningEffort;
   /** Optional catalog default for the thinking mode. */
   defaultThinking?: ThinkingMode;
+  /** Provider request-body fields from the agent's config (`ModelByIdConfig.requestFields`). */
+  requestFields?: RequestFields;
   /** Optional custom base URL for the LLM provider (e.g. self-hosted gateway). Falls back to FLUTCH_ROUTER_URL env or https://router.flutch.ai */
   baseURL?: string;
 }

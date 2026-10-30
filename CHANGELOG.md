@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.10] - 2026-10-30
+
+### Added
+
+- **Provider request fields from the agent's config: `requestFields`** (`ModelByIdConfig.requestFields`): fields of the provider's own request body, sent as given, so a parameter the SDK has no option for needs no SDK release. Objects merge into what the SDK sets: `{ thinking: { display: "summarized" } }` keeps the `thinking.type` from `thinking`. Bedrock Converse: `additionalModelRequestFields`; Anthropic: `thinking` and `output_config` as the client's own options, every other field in the body; OpenAI: `modelKwargs`. Unset — the request is unchanged, and so is the cache key.
+
 ## [0.7.9] - 2026-10-30
 
 ### Added
