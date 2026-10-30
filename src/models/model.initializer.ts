@@ -37,9 +37,11 @@ import {
   resolveSamplingParams,
   resolvePromptCacheControl,
   buildReasoningRequestFields,
+  mergeRequestFields,
   toOptionalNumber,
 } from "./model.logic";
 import type { PromptCacheControl } from "./model.logic";
+import type { ChatBedrockConverseInput } from "@langchain/aws";
 import {
   flutchFetch,
   flutchMistralHook,
@@ -223,10 +225,14 @@ export class ModelInitializer implements IModelInitializer {
       config.thinking === undefined
         ? withEffort
         : `${withEffort}:th:${config.thinking}`;
+    // Passed-through request fields change every request. Absent → key unchanged.
+    const withFields = config.requestFields
+      ? `${withThinking}:rf:${JSON.stringify(config.requestFields)}`
+      : withThinking;
     // Tool search binds a different tool set. Off → key unchanged.
     return config.toolSearch?.enabled
-      ? `${withThinking}:ts:${JSON.stringify(config.toolSearch)}`
-      : withThinking;
+      ? `${withFields}:ts:${JSON.stringify(config.toolSearch)}`
+      : withFields;
   }
 
   // Chat model creators
@@ -240,6 +246,7 @@ export class ModelInitializer implements IModelInitializer {
       apiToken,
       baseURL,
       defaultEffort,
+      requestFields,
     }) => {
       const config = buildOpenAIModelConfig(
         modelName,
@@ -248,6 +255,8 @@ export class ModelInitializer implements IModelInitializer {
         apiToken || this.resolveApiKey(ModelProvider.OPENAI) || "",
         defaultEffort
       );
+      // Sent as given in the request body.
+      if (requestFields) config.modelKwargs = requestFields;
       const routerURL = resolveRouterURL(baseURL);
       if (routerURL) {
         // Inject flutchFetch so X-Flutch-* headers from the current
@@ -268,10 +277,22 @@ export class ModelInitializer implements IModelInitializer {
         apiToken,
         baseURL,
         defaultThinking,
+        requestFields,
       },
       promptCacheControl
     ) => {
       const routerURL = resolveRouterURL(baseURL);
+      // `thinking` and `output_config` are ChatAnthropic's own options (it
+      // reads the first for its checks and writes the second after any extra
+      // body field), so they go there; every other field rides in the body.
+      const {
+        thinking,
+        output_config: outputConfig,
+        ...invocationKwargs
+      } = mergeRequestFields(
+        defaultThinking && { thinking: { type: defaultThinking } },
+        requestFields
+      ) ?? {};
       return new ChatAnthropic({
         modelName,
         // Claude Opus 4.7+ / Claude 5 reject `temperature` outright — the key
@@ -286,8 +307,11 @@ export class ModelInitializer implements IModelInitializer {
         // Bedrock's InvokeModel schema behind it.
         ...(promptCacheControl && { cache_control: promptCacheControl }),
         // The thinking mode as the API's own parameter; absent when unset.
-        ...(defaultThinking &&
-          ({ thinking: { type: defaultThinking } } as Record<string, unknown>)),
+        ...(thinking !== undefined &&
+          ({ thinking } as Record<string, unknown>)),
+        ...(outputConfig !== undefined &&
+          ({ outputConfig } as Record<string, unknown>)),
+        ...(Object.keys(invocationKwargs).length > 0 && { invocationKwargs }),
         anthropicApiKey:
           apiToken || this.resolveApiKey(ModelProvider.ANTHROPIC),
         ...(routerURL && { anthropicApiUrl: routerURL }),
@@ -587,6 +611,7 @@ export class ModelInitializer implements IModelInitializer {
       baseURL: config.baseURL ?? modelConfig.baseURL,
       defaultEffort: config.effort ?? modelConfig.defaultEffort,
       defaultThinking: config.thinking ?? modelConfig.defaultThinking,
+      requestFields: config.requestFields,
     };
 
     // Prompt caching. Resolved once from every name the model is known by, and
@@ -618,9 +643,13 @@ export class ModelInitializer implements IModelInitializer {
       // omitted entirely when unset, so the request is byte-identical to what
       // it was before — which also keeps the prompt cache warm.
       // The thinking mode rides in the same field (`thinking.type`).
-      const effortFields = buildReasoningRequestFields(
-        config.effort ?? modelConfig.defaultEffort,
-        config.thinking ?? modelConfig.defaultThinking
+      // Passed-through request fields merge over both.
+      const effortFields = mergeRequestFields(
+        buildReasoningRequestFields(
+          config.effort ?? modelConfig.defaultEffort,
+          config.thinking ?? modelConfig.defaultThinking
+        ),
+        config.requestFields
       );
 
       model = new FlutchChatBedrockConverse({
@@ -630,7 +659,11 @@ export class ModelInitializer implements IModelInitializer {
         ...(finalConfig.defaultTemperature !== undefined && {
           temperature: finalConfig.defaultTemperature,
         }),
-        ...(effortFields && { additionalModelRequestFields: effortFields }),
+        ...(effortFields && {
+          // Plain JSON: what Converse's DocumentType describes.
+          additionalModelRequestFields:
+            effortFields as ChatBedrockConverseInput["additionalModelRequestFields"],
+        }),
         maxTokens: finalConfig.defaultMaxTokens,
         streaming: true,
       }) as unknown as BaseChatModel;
