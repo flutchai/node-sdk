@@ -92,3 +92,92 @@ describe("GraphController — cancel on disconnect", () => {
     expect(service.cancelGeneration).not.toHaveBeenCalled();
   });
 });
+
+/** POSTs a run and returns what came back: the status and the whole body. */
+function postFull(
+  port: number,
+  path: string
+): Promise<{ status: number | undefined; body: string }> {
+  return new Promise(resolve => {
+    const body = JSON.stringify({ requestId: "req-2" });
+    const req = request(
+      {
+        port,
+        path,
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "content-length": Buffer.byteLength(body),
+        },
+      },
+      res => {
+        let text = "";
+        res.on("data", c => (text += c));
+        res.on("end", () => resolve({ status: res.statusCode, body: text }));
+      }
+    );
+    req.end(body);
+  });
+}
+
+describe("GraphController — heartbeat of a long run", () => {
+  let app: INestApplication;
+  let port: number;
+  const was = process.env.GRAPH_HEARTBEAT_MS;
+
+  beforeAll(async () => {
+    process.env.GRAPH_HEARTBEAT_MS = "30";
+    app = await NestFactory.create(GraphControllerTestModule, {
+      logger: false,
+    });
+    await app.listen(0);
+    port = Number(new URL(await app.getUrl()).port);
+  });
+
+  afterAll(async () => {
+    if (was === undefined) delete process.env.GRAPH_HEARTBEAT_MS;
+    else process.env.GRAPH_HEARTBEAT_MS = was;
+    await app.close();
+  });
+  beforeEach(() => jest.clearAllMocks());
+
+  it("keeps a long answer's connection alive with spaces that JSON.parse skips", async () => {
+    service.generateAnswer.mockImplementation(
+      () =>
+        new Promise(resolve => setTimeout(() => resolve({ text: "done" }), 200))
+    );
+    const { status, body } = await postFull(port, "/generate");
+    expect(status).toBe(201);
+    expect(body.startsWith(" ")).toBe(true);
+    expect(JSON.parse(body)).toEqual({ text: "done" });
+  });
+
+  it("sends a quick answer as it always was, and an error after the first beat as the body", async () => {
+    service.generateAnswer.mockResolvedValue({ text: "quick" });
+    const quick = await postFull(port, "/generate");
+    expect(quick.status).toBe(201);
+    expect(quick.body.trim()).toBe(JSON.stringify({ text: "quick" }));
+
+    service.generateAnswer.mockImplementation(
+      () =>
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("boom")), 200)
+        )
+    );
+    const failed = await postFull(port, "/generate");
+    expect(JSON.parse(failed.body)).toEqual({
+      statusCode: 500,
+      message: "Generation failed: boom",
+    });
+  });
+
+  it("sends an SSE comment each beat of a long stream, before the final event", async () => {
+    service.streamAnswer.mockImplementation(
+      () =>
+        new Promise(resolve => setTimeout(() => resolve({ text: "end" }), 200))
+    );
+    const { body } = await postFull(port, "/stream");
+    expect(body).toContain(": ping");
+    expect(body.indexOf(": ping")).toBeLessThan(body.indexOf("event: final"));
+  });
+});

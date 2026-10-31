@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.11] - 2026-10-31
+
+### Added
+
+- **`extractThinking(message)`**: what a model thought in one step, whatever the provider — Anthropic's `thinking` blocks, and OpenAI's reasoning summary from `additional_kwargs.reasoning.summary` or `reasoning` blocks of the content. A graph that shows its client the model's thoughts reads no provider's format itself (gpt-6.1-sol's thoughts never reached the client for that, 31.10.2026).
+- **Heartbeat of a long run** (`GRAPH_HEARTBEAT_MS`, 20 s by default, 0 turns it off): `generateAnswer` sends its headers after the first beat and a space each beat (`JSON.parse` skips them; an error after the first beat goes out as the body `{ statusCode, message }`), `streamAnswer` an SSE comment `: ping`. A caller drops a connection that stays silent past its idle limit, and a graph waiting on the agents it called is silent for minutes: a report pipeline was cut at 15 minutes, 21 seconds before its report was done (29.10.2026).
+
 ## [0.7.10] - 2026-10-30
 
 ### Added
