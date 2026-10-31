@@ -11,6 +11,11 @@ import {
 } from "../../messages";
 import { IGraphTraceEvent } from "../../graph/tracing";
 import { Injectable, Logger } from "@nestjs/common";
+import {
+  ThinkingStream,
+  splitThinking,
+  thinkingTexts,
+} from "./stream-thinking";
 import { sanitizeTraceData } from "../api-call-tracer.utils";
 
 /**
@@ -51,6 +56,8 @@ export interface StreamAccumulator {
   traceMessages: TraceMessageStore;
   traceStartedAt: number | null;
   traceCompletedAt: number | null;
+  /** The model's thoughts being streamed to the processing channel (a run's `stream_thinking`). */
+  thinking?: ThinkingStream;
 }
 
 /**
@@ -467,9 +474,27 @@ export class EventProcessor {
 
       const blocks: any[] = [];
 
-      // Anthropic-native streaming: text and tool_use blocks live inside chunk.content
+      // Anthropic-native streaming: text and tool_use blocks live inside chunk.content. The model's thoughts among
+      // them go to the processing channel as they come when the run asks for it, and nowhere otherwise.
       if (chunk.content) {
-        blocks.push(...this.normalizeContentBlocks(chunk.content));
+        const { thoughts, rest } = splitThinking(
+          this.normalizeContentBlocks(chunk.content)
+        );
+        blocks.push(...rest);
+        if (thoughts.length && event.metadata?.stream_thinking === true) {
+          acc.thinking ??= { runId: null, index: undefined, shown: false };
+          for (const text of thinkingTexts(
+            acc.thinking,
+            event.run_id ?? null,
+            thoughts
+          ))
+            this.processContentStream(
+              acc,
+              StreamChannel.PROCESSING,
+              [{ type: "text", text }],
+              onPartial
+            );
+        }
       }
 
       // LangChain unified streaming format: AIMessageChunk.tool_call_chunks.
