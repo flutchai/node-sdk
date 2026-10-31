@@ -77,17 +77,37 @@ export class GraphController {
   @ApiResponse({ status: 200, description: "Answer generated" })
   async generateAnswer(
     @Body() payload: IGraphRequestPayload,
-    @Res({ passthrough: true }) res: Response
-  ): Promise<IGraphResponsePayload> {
+    @Res() res: Response
+  ): Promise<void> {
     this.cancelOnDisconnect(res, payload.requestId);
+    // A run that takes longer than a heartbeat sends its headers and then a
+    // space each beat, so the caller's idle timeout sees a live connection;
+    // JSON.parse skips the leading whitespace. Its status is then sent, so an
+    // error after that goes out as the body { statusCode, message }.
+    let beating = false;
+    const stop = this.heartbeat(() => {
+      if (!beating) {
+        res
+          .status(HttpStatus.CREATED)
+          .setHeader("Content-Type", "application/json");
+        beating = true;
+      }
+      res.write(" ");
+    });
     try {
-      return await this.graphService.generateAnswer(payload);
+      const result = await this.graphService.generateAnswer(payload);
+      stop();
+      if (beating) res.end(JSON.stringify(result));
+      else res.status(HttpStatus.CREATED).json(result);
     } catch (error) {
+      stop();
       this.logger.error(`Generation failed: ${error.message}`);
-      throw new HttpException(
-        `Generation failed: ${error.message}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+      const failure = {
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: `Generation failed: ${error.message}`,
+      };
+      if (beating) res.end(JSON.stringify(failure));
+      else res.status(HttpStatus.INTERNAL_SERVER_ERROR).json(failure);
     }
   }
 
@@ -103,6 +123,9 @@ export class GraphController {
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     this.cancelOnDisconnect(res, payload.requestId);
+    // An SSE comment each beat: the caller's idle timeout sees a live run even
+    // while the graph waits silently for the agents it called; clients skip it.
+    const stop = this.heartbeat(() => res.write(": ping\n\n"));
 
     try {
       this.logger.debug(
@@ -130,6 +153,7 @@ export class GraphController {
         resultKeys: Object.keys(result || {}),
       });
 
+      stop();
       // Send final result as SSE event
       res.write(`event: final\n`);
       res.write(`data: ${JSON.stringify(result)}\n\n`);
@@ -137,6 +161,7 @@ export class GraphController {
 
       this.logger.debug(`[CONTROLLER] Stream completed successfully`);
     } catch (error) {
+      stop();
       this.logger.error(`[CONTROLLER] Streaming failed: ${error.message}`);
       this.logger.error(`[CONTROLLER] Error stack: ${error.stack}`);
       // Send error as SSE event
@@ -144,6 +169,21 @@ export class GraphController {
       res.write(`data: ${JSON.stringify({ message: error.message })}\n\n`);
       res.end();
     }
+  }
+
+  /**
+   * Calls `beat` every GRAPH_HEARTBEAT_MS (20 s by default, 0 turns it off)
+   * while a run goes on; returns the function that stops it. A caller drops a
+   * connection that stays silent past its idle limit — the backend's is
+   * GRAPH_SERVICE_TIMEOUT_MS — and a graph waiting on other agents is silent
+   * for minutes: a report pipeline was cut at 15 minutes, 21 seconds before
+   * its report was done (29.10.2026).
+   */
+  private heartbeat(beat: () => void): () => void {
+    const ms = Number(process.env.GRAPH_HEARTBEAT_MS ?? 20000);
+    if (!(ms > 0)) return () => undefined;
+    const timer = setInterval(beat, ms);
+    return () => clearInterval(timer);
   }
 
   /**

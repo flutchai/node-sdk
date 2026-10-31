@@ -9,3 +9,4 @@ export * from "./metrics";
 export * from "./reasoning";
 export * from "./streaming";
 export * from "./tracing";
+export * from "./thinking";
