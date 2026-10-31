@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.12] - 2026-10-31
+
+### Added
+
+- **The model's thoughts stream to the processing channel** when the run's metadata says `stream_thinking: true`: Anthropic's `thinking` deltas and the deltas of OpenAI's reasoning summary go out token by token as the model writes them, before its text; a new thought (another model run, another summary part) starts a new paragraph. They were sent only after the step (`extractThinking`), when the answer had already streamed. Without `stream_thinking` nothing changes (thinking deltas stay out of the streamed content).
+
 ## [0.7.11] - 2026-10-31
 
 ### Added

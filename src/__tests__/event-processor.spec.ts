@@ -129,6 +129,113 @@ describe("EventProcessor", () => {
     });
   });
 
+  describe("processEvent - the model's thoughts as they stream", () => {
+    const stream = (
+      content: any[],
+      runId = "m1",
+      meta: Record<string, unknown> = { stream_thinking: true }
+    ) => ({
+      event: "on_chat_model_stream",
+      run_id: runId,
+      data: { chunk: { content } },
+      metadata: {
+        stream_channel: StreamChannel.TEXT,
+        langgraph_node: "generate",
+        ...meta,
+      },
+    });
+    const deltas = (onPartial: jest.Mock) =>
+      onPartial.mock.calls
+        .map((c: any[]) => JSON.parse(c[0]))
+        .filter((p: any) => p.delta?.type === "text_chunk")
+        .map((p: any) => [p.channel, p.delta.text]);
+
+    it("sends OpenAI's reasoning summary token by token, before the text, a paragraph between its parts", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+      for (const reasoning of ["Found", " Mango", " in stores."])
+        processor.processEvent(
+          acc,
+          stream([{ type: "reasoning", reasoning, index: 0 }]),
+          onPartial
+        );
+      processor.processEvent(
+        acc,
+        stream([{ type: "reasoning", reasoning: "A second part.", index: 1 }]),
+        onPartial
+      );
+      processor.processEvent(
+        acc,
+        stream([{ type: "text", text: "Mango has stores." }]),
+        onPartial
+      );
+
+      expect(deltas(onPartial)).toEqual([
+        ["processing", "Found"],
+        ["processing", " Mango"],
+        ["processing", " in stores."],
+        ["processing", "\n\nA second part."],
+        ["text", "Mango has stores."],
+      ]);
+      expect(acc.channels.get(StreamChannel.TEXT)!.currentBlock).toEqual(
+        expect.objectContaining({ text: "Mango has stores." })
+      );
+    });
+
+    it("sends Anthropic's thinking deltas, skips a signature, and sets the next run apart", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+      processor.processEvent(
+        acc,
+        stream([{ type: "thinking", thinking: "Checking", index: 0 }]),
+        onPartial
+      );
+      processor.processEvent(
+        acc,
+        stream([{ type: "thinking", thinking: " the stores", index: 0 }]),
+        onPartial
+      );
+      processor.processEvent(
+        acc,
+        stream([{ type: "thinking", signature: "sig", index: 0 }]),
+        onPartial
+      );
+      processor.processEvent(
+        acc,
+        stream(
+          [{ type: "thinking", thinking: "Now the answer.", index: 0 }],
+          "m2"
+        ),
+        onPartial
+      );
+
+      expect(deltas(onPartial)).toEqual([
+        ["processing", "Checking"],
+        ["processing", " the stores"],
+        ["processing", "\n\nNow the answer."],
+      ]);
+    });
+
+    it("sends no thoughts when the run does not ask for them", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+      processor.processEvent(
+        acc,
+        stream(
+          [{ type: "reasoning", reasoning: "Thinking.", index: 0 }],
+          "m1",
+          {}
+        ),
+        onPartial
+      );
+
+      expect(deltas(onPartial)).toEqual([]);
+      expect(
+        acc.channels.get(StreamChannel.PROCESSING)!.currentBlock
+      ).toBeNull();
+    });
+  });
+
   describe("processEvent - tool call in content and in tool_call_chunks", () => {
     it("opens one step per call and does not double its arguments", () => {
       const acc = createAccumulator();
