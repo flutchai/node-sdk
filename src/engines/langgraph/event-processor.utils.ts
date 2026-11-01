@@ -150,9 +150,10 @@ export class EventProcessor {
     ].filter(b => b.type === "tool_use");
     const block =
       (data.id ? blocks.find(b => b.id === data.id) : undefined) ??
-      [...blocks].reverse().find(b => b.name === data.name && !b.label);
+      [...blocks].reverse().find(b => b.name === data.name && !b.labelled);
     if (!block) return;
     block.label = String(data.label);
+    block.labelled = true;
     this.sendDelta(
       channel,
       { type: "tool_label", stepId: block.id, label: block.label },
@@ -307,7 +308,8 @@ export class EventProcessor {
     acc: StreamAccumulator,
     channel: StreamChannel,
     blocks: any[],
-    onPartial?: (chunk: string) => void
+    onPartial?: (chunk: string) => void,
+    titles?: Record<string, unknown>
   ): void {
     const state = acc.channels.get(channel)!;
 
@@ -319,6 +321,8 @@ export class EventProcessor {
         }
 
         // Create new tool block
+        // The tool's name for a reader, when the run gives one (metadata tool_titles): shown until the call's own label.
+        const title = titles?.[String(block.name)];
         state.currentBlock = {
           index: state.contentChain.length,
           type: "tool_use",
@@ -326,6 +330,7 @@ export class EventProcessor {
           id: block.id,
           input: block.input || "",
           output: "",
+          ...(typeof title === "string" && title ? { label: title } : {}),
         };
 
         // Track this tool block for matching with on_tool_end
@@ -567,7 +572,13 @@ export class EventProcessor {
       }
 
       if (blocks.length > 0) {
-        this.processContentStream(acc, channel, blocks, onPartial);
+        this.processContentStream(
+          acc,
+          channel,
+          blocks,
+          onPartial,
+          event.metadata?.tool_titles
+        );
       }
       return;
     }

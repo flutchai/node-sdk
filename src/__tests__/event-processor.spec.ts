@@ -305,6 +305,54 @@ describe("EventProcessor", () => {
     });
   });
 
+  describe("processEvent - a tool's title until the call's label", () => {
+    it("names a call by the run's tool_titles when it starts, then by its own label", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+      processor.processEvent(
+        acc,
+        {
+          event: "on_chat_model_stream",
+          data: {
+            chunk: {
+              content: [
+                { type: "tool_use", id: "c1", name: "brand_pack", input: "" },
+              ],
+            },
+          },
+          metadata: {
+            stream_channel: StreamChannel.TEXT,
+            langgraph_node: "generate",
+            tool_titles: { brand_pack: "Studying the brand" },
+          },
+        },
+        onPartial
+      );
+      const started = onPartial.mock.calls
+        .map((c: any[]) => JSON.parse(c[0]))
+        .find((p: any) => p.delta?.type === "step_started");
+      expect(started.delta.step.label).toBe("Studying the brand");
+
+      processor.processEvent(
+        acc,
+        {
+          event: "on_custom_event",
+          name: "tool_label",
+          data: { name: "brand_pack", label: "Studying the brand Flabelus" },
+          metadata: {
+            stream_channel: StreamChannel.TEXT,
+            langgraph_node: "tools",
+          },
+        },
+        onPartial
+      );
+      expect(acc.channels.get(StreamChannel.TEXT)!.currentBlock).toMatchObject({
+        label: "Studying the brand Flabelus",
+        labelled: true,
+      });
+    });
+  });
+
   describe("processEvent - an attachment changed after it was sent (update_attachment)", () => {
     const custom = (name: string, data: Record<string, unknown>) => ({
       event: "on_custom_event",
