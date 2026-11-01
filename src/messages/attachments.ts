@@ -17,6 +17,8 @@ export enum AttachmentType {
 
 /** Attachment interface */
 export interface IAttachment {
+  /** Names the attachment so that it can be changed later (dispatchAttachmentUpdate): a progress list, a report card. */
+  id?: string;
   type: AttachmentType;
   value: any;
   metadata?: Record<string, any>;

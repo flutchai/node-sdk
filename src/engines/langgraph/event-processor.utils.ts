@@ -133,6 +133,34 @@ export class EventProcessor {
   private readonly logger = new Logger(EventProcessor.name);
 
   /**
+   * Sets a call's label on its `tool_use` block and tells the client. The block is the call's by id, else the latest
+   * block of that tool with no label (a block opened from a model that gave no id, or by name at on_tool_start).
+   */
+  private labelToolBlock(
+    acc: StreamAccumulator,
+    channel: StreamChannel,
+    data: { id?: string; name?: string; label: string },
+    onPartial?: (chunk: string) => void
+  ): void {
+    const state = acc.channels.get(channel);
+    if (!state) return;
+    const blocks = [
+      ...state.contentChain,
+      ...(state.currentBlock ? [state.currentBlock] : []),
+    ].filter(b => b.type === "tool_use");
+    const block =
+      (data.id ? blocks.find(b => b.id === data.id) : undefined) ??
+      [...blocks].reverse().find(b => b.name === data.name && !b.label);
+    if (!block) return;
+    block.label = String(data.label);
+    this.sendDelta(
+      channel,
+      { type: "tool_label", stepId: block.id, label: block.label },
+      onPartial
+    );
+  }
+
+  /**
    * Create new accumulator for a stream
    */
   createAccumulator(): StreamAccumulator {
@@ -443,6 +471,24 @@ export class EventProcessor {
       }
 
       // Handle attachments streaming
+      if (event.name === "tool_label" && event.data.label) {
+        this.labelToolBlock(acc, channel, event.data, onPartial);
+      }
+      if (event.name === "update_attachment" && event.data.id) {
+        const target = acc.attachments.find(a => a.id === event.data.id);
+        const patch = event.data.patch ?? {};
+        if (target) {
+          if (patch.value && typeof patch.value === "object")
+            target.value = { ...(target.value ?? {}), ...patch.value };
+          if (patch.metadata && typeof patch.metadata === "object")
+            target.metadata = { ...(target.metadata ?? {}), ...patch.metadata };
+          this.sendDelta(
+            channel,
+            { type: "attachment_updated", id: event.data.id, patch },
+            onPartial
+          );
+        }
+      }
       if (event.name === "send_attachments" && event.data.attachments) {
         const attachments = event.data.attachments || [];
         acc.attachments = [...acc.attachments, ...attachments];
