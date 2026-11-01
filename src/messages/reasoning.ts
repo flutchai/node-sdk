@@ -14,6 +14,8 @@ export interface IContentBlock {
   id?: string; // Tool ID
   input?: string; // Tool parameters (IN) - what we passed to the tool
   output?: string; // Tool result (OUT) - what the tool returned
+  /** A line a client reads for the call in its own words («Studying the brand Flabelus»), set by the graph (dispatchToolLabel). */
+  label?: string;
 }
 
 /** Chain of content blocks */

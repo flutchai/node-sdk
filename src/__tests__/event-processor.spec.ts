@@ -236,6 +236,75 @@ describe("EventProcessor", () => {
     });
   });
 
+  describe("processEvent - a call named for the client (tool_label)", () => {
+    const label = (
+      data: Record<string, unknown>,
+      channel = StreamChannel.TEXT
+    ) => ({
+      event: "on_custom_event",
+      name: "tool_label",
+      data,
+      metadata: { stream_channel: channel, langgraph_node: "tools" },
+    });
+    const open = (id: string, name: string) =>
+      chatModelStreamEvent([{ type: "tool_use", id, name, input: "" }]);
+    const deltas = (onPartial: jest.Mock) =>
+      onPartial.mock.calls
+        .map((c: any[]) => JSON.parse(c[0]))
+        .filter((p: any) => p.delta?.type === "tool_label")
+        .map((p: any) => [p.channel, p.delta.stepId, p.delta.label]);
+
+    it("sets the label on the call's block by id and sends it", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+      processor.processEvent(acc, open("call_1", "brand_pack"), onPartial);
+      processor.processEvent(acc, open("call_2", "brand_pack"), onPartial);
+      processor.processEvent(
+        acc,
+        label({
+          id: "call_1",
+          name: "brand_pack",
+          label: "Studying the brand Flabelus",
+        }),
+        onPartial
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.contentChain[0].label).toBe("Studying the brand Flabelus");
+      expect(state.currentBlock?.label).toBeUndefined();
+      expect(deltas(onPartial)).toEqual([
+        ["text", "call_1", "Studying the brand Flabelus"],
+      ]);
+    });
+
+    it("takes the latest unlabelled block of the tool when the id matches none, and ignores a call it cannot find", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+      processor.processEvent(acc, open("run-a", "brand_pack"), onPartial);
+      processor.processEvent(acc, open("run-b", "brand_pack"), onPartial);
+      processor.processEvent(
+        acc,
+        label({ id: "model-id", name: "brand_pack", label: "First" }),
+        onPartial
+      );
+      processor.processEvent(
+        acc,
+        label({ id: "model-id-2", name: "brand_pack", label: "Second" }),
+        onPartial
+      );
+      processor.processEvent(
+        acc,
+        label({ id: "x", name: "country_facts", label: "Nobody's" }),
+        onPartial
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.currentBlock?.label).toBe("First");
+      expect(state.contentChain[0].label).toBe("Second");
+      expect(deltas(onPartial)).toHaveLength(2);
+    });
+  });
+
   describe("processEvent - tool call in content and in tool_call_chunks", () => {
     it("opens one step per call and does not double its arguments", () => {
       const acc = createAccumulator();

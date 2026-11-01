@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.13] - 2026-11-01
+
+### Added
+
+- **`dispatchToolLabel(call, label, config)`**: names a tool call for the client — a short line in the client's own words («Studying the brand Flabelus») that a chat shows in place of the call's raw input and output. The EventProcessor sets it as `label` on the call's `tool_use` block (the block of this `id`, else the latest unlabelled block of this tool `name`) and sends a `tool_label` delta (`stepId`, `label`). The text is the graph's: the SDK knows no tool.
+
 ## [0.7.12] - 2026-10-31
 
 ### Added

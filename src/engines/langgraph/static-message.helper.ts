@@ -74,3 +74,24 @@ export async function dispatchAttachments(
   // Dispatch custom event for attachments (works with streamEvents v2)
   await dispatchCustomEvent("send_attachments", { attachments }, config);
 }
+
+/**
+ * Names a tool call for the client: a short line in the client's words («Studying the brand Flabelus»), shown in place
+ * of the call's raw input and output. The EventProcessor sets it on the call's `tool_use` block (the block of this
+ * call `id`, else the latest unlabelled block of this tool `name`) and sends a `tool_label` delta.
+ *
+ * @param call - The call: the id the model gave it (the block's id) and the tool's name
+ * @param label - The line
+ * @param config - LangGraph runnable config (required for dispatchCustomEvent)
+ */
+export async function dispatchToolLabel(
+  call: { id?: string; name: string },
+  label: string,
+  config: LangGraphRunnableConfig
+): Promise<void> {
+  await dispatchCustomEvent(
+    "tool_label",
+    { id: call.id, name: call.name, label },
+    config
+  );
+}
