@@ -16,6 +16,8 @@ export interface IContentBlock {
   output?: string; // Tool result (OUT) - what the tool returned
   /** A line a client reads for the call in its own words («Studying the brand Flabelus»), set by the graph (dispatchToolLabel). */
   label?: string;
+  /** The label is the call's own (dispatchToolLabel), not the tool's title. */
+  labelled?: boolean;
 }
 
 /** Chain of content blocks */

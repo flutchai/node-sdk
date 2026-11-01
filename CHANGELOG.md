@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.14] - 2026-11-01
+
+### Added
+
+- **A tool's title until the call's label**: a run whose metadata gives `tool_titles` (`{ <tool name>: <title> }`) names each call by its tool's title as soon as the call starts (`label` on the `tool_use` block of `step_started`), so a reader never sees a raw tool name; the call's own label (`dispatchToolLabel`) replaces it and marks the block `labelled`.
+
 ## [0.7.13] - 2026-11-01
 
 ### Added
