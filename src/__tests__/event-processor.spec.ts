@@ -305,6 +305,71 @@ describe("EventProcessor", () => {
     });
   });
 
+  describe("processEvent - an attachment changed after it was sent (update_attachment)", () => {
+    const custom = (name: string, data: Record<string, unknown>) => ({
+      event: "on_custom_event",
+      name,
+      data,
+      metadata: { stream_channel: StreamChannel.TEXT, langgraph_node: "tools" },
+    });
+    const updates = (onPartial: jest.Mock) =>
+      onPartial.mock.calls
+        .map((c: any[]) => JSON.parse(c[0]))
+        .filter((p: any) => p.delta?.type === "attachment_updated")
+        .map((p: any) => p.delta);
+
+    it("merges the patch into the attachment of that id and sends it; leaves the others and unknown ids alone", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+      processor.processEvent(
+        acc,
+        custom("send_attachments", {
+          attachments: [
+            {
+              id: "steps",
+              type: "card",
+              value: { steps: ["a"], title: "T" },
+              metadata: { k: 1 },
+            },
+            { id: "other", type: "card", value: { x: 1 } },
+          ],
+        }),
+        onPartial
+      );
+      processor.processEvent(
+        acc,
+        custom("update_attachment", {
+          id: "steps",
+          patch: { value: { steps: ["a", "b"] }, metadata: { done: true } },
+        }),
+        onPartial
+      );
+      processor.processEvent(
+        acc,
+        custom("update_attachment", {
+          id: "nobody",
+          patch: { value: { x: 2 } },
+        }),
+        onPartial
+      );
+
+      expect(acc.attachments[0]).toEqual({
+        id: "steps",
+        type: "card",
+        value: { steps: ["a", "b"], title: "T" },
+        metadata: { k: 1, done: true },
+      });
+      expect(acc.attachments[1].value).toEqual({ x: 1 });
+      expect(updates(onPartial)).toEqual([
+        {
+          type: "attachment_updated",
+          id: "steps",
+          patch: { value: { steps: ["a", "b"] }, metadata: { done: true } },
+        },
+      ]);
+    });
+  });
+
   describe("processEvent - tool call in content and in tool_call_chunks", () => {
     it("opens one step per call and does not double its arguments", () => {
       const acc = createAccumulator();

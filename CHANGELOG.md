@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`dispatchAttachmentUpdate(id, patch, config)`**: changes an attachment the graph sent earlier — one with an `id` (new optional field of `IAttachment`): a list of steps that get done, a card whose loader stops. The EventProcessor merges `patch.value` into its `value` and `patch.metadata` into its metadata (one level deep) and sends an `attachment_updated` delta (`id`, `patch`). An attachment it does not hold is left alone: the host changes a saved one.
 - **`dispatchToolLabel(call, label, config)`**: names a tool call for the client — a short line in the client's own words («Studying the brand Flabelus») that a chat shows in place of the call's raw input and output. The EventProcessor sets it as `label` on the call's `tool_use` block (the block of this `id`, else the latest unlabelled block of this tool `name`) and sends a `tool_label` delta (`stepId`, `label`). The text is the graph's: the SDK knows no tool.
 
 ## [0.7.12] - 2026-10-31

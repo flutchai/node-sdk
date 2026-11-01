@@ -95,3 +95,20 @@ export async function dispatchToolLabel(
     config
   );
 }
+
+/**
+ * Changes an attachment the graph sent earlier (one with an `id`): a list of steps that get done, a card whose loader
+ * stops. The EventProcessor merges `patch.value` into the attachment's `value` and `patch.metadata` into its metadata
+ * (one level deep: a key given replaces that key) and sends an `attachment_updated` delta. An attachment it does not
+ * hold is left alone (the host changes a saved one).
+ */
+export async function dispatchAttachmentUpdate(
+  id: string,
+  patch: {
+    value?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+  },
+  config: LangGraphRunnableConfig
+): Promise<void> {
+  await dispatchCustomEvent("update_attachment", { id, patch }, config);
+}

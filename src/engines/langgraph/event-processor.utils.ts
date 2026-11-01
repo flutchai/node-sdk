@@ -474,6 +474,21 @@ export class EventProcessor {
       if (event.name === "tool_label" && event.data.label) {
         this.labelToolBlock(acc, channel, event.data, onPartial);
       }
+      if (event.name === "update_attachment" && event.data.id) {
+        const target = acc.attachments.find(a => a.id === event.data.id);
+        const patch = event.data.patch ?? {};
+        if (target) {
+          if (patch.value && typeof patch.value === "object")
+            target.value = { ...(target.value ?? {}), ...patch.value };
+          if (patch.metadata && typeof patch.metadata === "object")
+            target.metadata = { ...(target.metadata ?? {}), ...patch.metadata };
+          this.sendDelta(
+            channel,
+            { type: "attachment_updated", id: event.data.id, patch },
+            onPartial
+          );
+        }
+      }
       if (event.name === "send_attachments" && event.data.attachments) {
         const attachments = event.data.attachments || [];
         acc.attachments = [...acc.attachments, ...attachments];
