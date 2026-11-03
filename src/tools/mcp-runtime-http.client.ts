@@ -1,4 +1,5 @@
 import { Injectable, Logger, Optional } from "@nestjs/common";
+import { IToolUsageMetadata, toolEndOutput, toolUsageOf } from "./tool-usage";
 import axios, { AxiosInstance } from "axios";
 import {
   McpTool,
@@ -156,7 +157,13 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
     executionContext: Record<string, any>,
     config?: RunnableConfig,
     mcpServers?: Record<string, any>[]
-  ): Promise<{ content: string; success: boolean; rawResult?: any }> {
+  ): Promise<{
+    content: string;
+    success: boolean;
+    rawResult?: any;
+    /** What the call cost, when mcp-runtime said (usage_metadata.total_cost). */
+    usageMetadata?: IToolUsageMetadata;
+  }> {
     // Parse callback configuration
     const parsedConfig = parseCallbackConfigArg(config);
     const callbackManager = CallbackManager.configure(parsedConfig.callbacks);
@@ -189,13 +196,17 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
         config?.signal
       );
 
+      // The cost goes to the trace on the end event, not to the model.
+      const { usage_metadata: rawUsage, ...shown } = result;
+      const usageMetadata = toolUsageOf(rawUsage);
+
       // Create content (stringified for ToolMessage)
-      const content = result.success
-        ? JSON.stringify(result)
-        : result.error || JSON.stringify(result);
+      const content = shown.success
+        ? JSON.stringify(shown)
+        : shown.error || JSON.stringify(shown);
 
       // Emit on_tool_end event
-      await runManager?.handleToolEnd(content);
+      await runManager?.handleToolEnd(toolEndOutput(content, usageMetadata));
 
       // rawResult: structured data before stringification.
       // Used by graph builder to detect large results and store them
@@ -205,6 +216,7 @@ export class McpRuntimeHttpClient implements McpRuntimeClient {
         content,
         success: result.success,
         rawResult: result.success ? result.result : undefined,
+        ...(usageMetadata && { usageMetadata }),
       };
     } catch (error) {
       this.logger.error(`Error executing tool ${toolName}:`, error);

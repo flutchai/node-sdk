@@ -1,6 +1,7 @@
 /**
  * MCP Tool interfaces for integration with LangChain
  */
+import type { IToolUsageMetadata } from "./tool-usage";
 
 export interface McpTool {
   name: string;
@@ -16,6 +17,8 @@ export interface ToolExecutionResult {
   success: boolean;
   result?: any;
   error?: string;
+  /** What the call cost, when the tool knows (see tool-usage.ts). Never shown to the model. */
+  usage_metadata?: IToolUsageMetadata;
 }
 
 export interface McpRuntimeClient {

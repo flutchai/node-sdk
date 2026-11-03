@@ -1,4 +1,5 @@
 import { DynamicStructuredTool, StructuredTool } from "@langchain/core/tools";
+import { IToolUsageMetadata, toolUsageOf } from "./tool-usage";
 import { RunnableConfig } from "@langchain/core/runnables";
 import axios from "axios";
 import { Logger } from "@nestjs/common";
@@ -19,6 +20,7 @@ interface ToolExecutionResult {
   success: boolean;
   result?: any;
   error?: string;
+  usage_metadata?: unknown;
 }
 
 /**
@@ -130,11 +132,16 @@ export class McpConverter {
       name: mcpTool.name,
       description: enhancedDescription,
       schema,
+      // The call's cost rides on the ToolMessage's artifact, which the model
+      // never sees and the trace keeps (see tool-usage.ts).
+      responseFormat: "content_and_artifact",
       func: async (
         input: Record<string, any>,
         _runManager,
         config?: RunnableConfig
-      ): Promise<string> => {
+      ): Promise<
+        [string, { usage_metadata: IToolUsageMetadata } | undefined]
+      > => {
         logger.log(`🔧 [${mcpTool.name}] LLM INPUT: ${JSON.stringify(input)}`);
 
         // Extract context from RunnableConfig.configurable
@@ -188,7 +195,8 @@ export class McpConverter {
             `🔧 [${mcpTool.name}] TOOL OUTPUT: ${output.length > 200 ? output.substring(0, 200) + "..." : output}`
           );
 
-          return output;
+          const usage = toolUsageOf(result.usage_metadata);
+          return [output, usage ? { usage_metadata: usage } : undefined];
         } catch (error) {
           logger.error(
             `🔧 [${mcpTool.name}] Exception during execution`,

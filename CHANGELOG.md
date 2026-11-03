@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.15] - 2026-11-02
+
+### Added
+
+- **What a tool call cost** (`usage_metadata: { total_cost }`, USD — the shape LangSmith reads off any run). A tool puts it beside its result: mcp-runtime's `ToolExecutionResult.usage_metadata`, or a graph's own tool through `toolEndOutput(content, usage)` on `handleToolEnd`. `executeToolWithEvents` keeps it out of the content the model reads, ends the call with `{ content, usage_metadata }` and returns it as `usageMetadata`; tools made by `McpConverter` return it as the ToolMessage's `artifact` (`responseFormat: "content_and_artifact"`). The client's tool block shows the content alone; the trace keeps the cost for the backend. Helpers: `toolUsageOf`, `toolEndOutput`, `toolEndContent`.
+
 ## [0.7.14] - 2026-11-01
 
 ### Added
