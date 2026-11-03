@@ -5,6 +5,9 @@ export * from "./config";
 // MCP Tool interfaces
 export * from "./mcp.interfaces";
 
+// What a tool call cost (usage_metadata.total_cost)
+export * from "./tool-usage";
+
 // MCP Tool converter and filter
 export * from "./mcp-converter";
 export * from "./mcp-tool-filter";

@@ -2,6 +2,7 @@
  * Universal LangGraph stream processing and result extraction utilities
  */
 
+import { toolEndContent } from "../../tools/tool-usage";
 import {
   IContentBlock,
   IContentChain,
@@ -677,10 +678,12 @@ export class EventProcessor {
         const output = event.data?.output;
         let outputString: string;
         try {
+          // A paid call's output carries its cost beside the text: the
+          // client gets the text, the cost stays in the trace.
           outputString =
             typeof output === "string"
               ? output
-              : JSON.stringify(output, null, 2);
+              : (toolEndContent(output) ?? JSON.stringify(output, null, 2));
         } catch {
           // Handle very large outputs that can't be stringified (e.g. 509MB tool results)
           outputString =
