@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.16] - 2026-11-04
+
+### Fixed
+
+- **A failed tool call closes its step.** `on_tool_error` gives the call's block the error as its result (`Error: <message>`) and sends `tool_output_chunk`, matched by run id or the pending block of the same tool — never another tool's. Before, the block lost its run and the client showed it running for good.
+- **A call whose end never came is closed at finalization**: `getResult` gives every pending or mapped tool block without a result `No result: the call's end was not received.`, instead of only warning about orphaned blocks (04.11.2026: a model call inside a tool took the tool's run id, the tool's end never arrived, and its step stayed running in the saved message).
+
 ## [0.7.15] - 2026-11-02
 
 ### Added

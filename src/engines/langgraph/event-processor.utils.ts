@@ -92,6 +92,8 @@ export function joinTextSteps(parts: string[]): string {
 
 const MIN_DUPLICATE_WORDS = 8;
 const DUPLICATE_SIMILARITY = 0.75;
+/** The result of a call whose end event never came: the step is closed with it. */
+const NO_TOOL_END = "No result: the call's end was not received.";
 
 function paragraphsOf(text: string): string[] {
   return text
@@ -692,31 +694,7 @@ export class EventProcessor {
               : "[Output too large to display]";
         }
 
-        // Truncate to avoid oversized message documents in MongoDB (16MB limit).
-        // Cut at a safe boundary (last newline) to avoid breaking JSON mid-token.
-        const MAX_TOOL_OUTPUT_LENGTH = 50_000;
-        if (outputString.length > MAX_TOOL_OUTPUT_LENGTH) {
-          let cutAt = outputString.lastIndexOf("\n", MAX_TOOL_OUTPUT_LENGTH);
-          if (cutAt < MAX_TOOL_OUTPUT_LENGTH * 0.8) {
-            // No good newline found nearby, fall back to limit
-            cutAt = MAX_TOOL_OUTPUT_LENGTH;
-          }
-          outputString =
-            outputString.slice(0, cutAt) +
-            `\n... [truncated: ${outputString.length - cutAt} chars]`;
-        }
-
-        toolBlock.output = outputString;
-
-        this.sendDelta(
-          channel,
-          {
-            type: "tool_output_chunk",
-            stepId: toolBlock.id,
-            chunk: outputString,
-          },
-          onPartial
-        );
+        this.closeToolBlock(channel, toolBlock, outputString, onPartial);
 
         this.logger.log("✅ Tool completed", {
           toolName: event.name,
@@ -736,8 +714,24 @@ export class EventProcessor {
       const channel =
         (event.metadata?.stream_channel as StreamChannel) ?? StreamChannel.TEXT;
       const state = acc.channels.get(channel);
-      if (state && event.run_id) {
+      // A failed call is a finished one: its step gets the error as its
+      // result, or the client shows it running for good. Matched by run id,
+      // else the pending block of the same tool — never another tool's.
+      let toolBlock: IContentBlock | undefined;
+      if (state && event.run_id && state.toolBlocksByRunId.has(event.run_id)) {
+        toolBlock = state.toolBlocksByRunId.get(event.run_id);
         state.toolBlocksByRunId.delete(event.run_id);
+      } else if (state) {
+        const idx = state.pendingToolBlocks.findIndex(
+          b => b.name === event.name
+        );
+        if (idx !== -1) toolBlock = state.pendingToolBlocks.splice(idx, 1)[0];
+      }
+      if (toolBlock && toolBlock.type === "tool_use") {
+        const error = event.data?.error;
+        const message =
+          error instanceof Error ? error.message : String(error ?? "failed");
+        this.closeToolBlock(channel, toolBlock, `Error: ${message}`, onPartial);
       }
       this.logger.error("❌ Tool failed", {
         toolName: event.name,
@@ -786,6 +780,43 @@ export class EventProcessor {
   }
 
   /**
+   * A call's result on its block and to the client: the client closes the
+   * step on it. Cut to keep the message document under MongoDB's 16MB.
+   */
+  private closeToolBlock(
+    channel: StreamChannel,
+    toolBlock: IContentBlock,
+    output: string,
+    onPartial?: (chunk: string) => void
+  ): void {
+    // Cut at a safe boundary (last newline) to avoid breaking JSON mid-token.
+    const MAX_TOOL_OUTPUT_LENGTH = 50_000;
+    let outputString = output;
+    if (outputString.length > MAX_TOOL_OUTPUT_LENGTH) {
+      let cutAt = outputString.lastIndexOf("\n", MAX_TOOL_OUTPUT_LENGTH);
+      if (cutAt < MAX_TOOL_OUTPUT_LENGTH * 0.8) {
+        // No good newline found nearby, fall back to limit
+        cutAt = MAX_TOOL_OUTPUT_LENGTH;
+      }
+      outputString =
+        outputString.slice(0, cutAt) +
+        `\n... [truncated: ${outputString.length - cutAt} chars]`;
+    }
+
+    toolBlock.output = outputString;
+
+    this.sendDelta(
+      channel,
+      {
+        type: "tool_output_chunk",
+        stepId: toolBlock.id,
+        chunk: outputString,
+      },
+      onPartial
+    );
+  }
+
+  /**
    * Build final result from accumulator
    * Returns unified content chains from all channels
    */
@@ -806,6 +837,10 @@ export class EventProcessor {
 
     for (const [channel, state] of acc.channels.entries()) {
       // Safety net: warn about orphaned tool blocks that were never resolved
+      // A call whose end never came is closed with a result that says so:
+      // the saved message is what the client renders after the run, and a
+      // step without a result stays running there for good (04.11.2026: the
+      // tool's run was taken over by a model call inside it).
       if (
         state.pendingToolBlocks.length > 0 ||
         state.toolBlocksByRunId.size > 0
@@ -815,6 +850,14 @@ export class EventProcessor {
           pendingCount: state.pendingToolBlocks.length,
           mappedCount: state.toolBlocksByRunId.size,
         });
+        for (const block of [
+          ...state.pendingToolBlocks,
+          ...state.toolBlocksByRunId.values(),
+        ])
+          if (block.type === "tool_use" && !block.output)
+            block.output = NO_TOOL_END;
+        state.pendingToolBlocks = [];
+        state.toolBlocksByRunId.clear();
       }
 
       // Finalize current block if exists
