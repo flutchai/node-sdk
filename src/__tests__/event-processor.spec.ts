@@ -909,6 +909,88 @@ describe("EventProcessor", () => {
         );
       }).not.toThrow();
     });
+
+    it("closes the failed call's step with the error as its result", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          { type: "tool_use", id: "toolu_1", name: "failing_tool", input: "" },
+        ])
+      );
+      processor.processEvent(acc, toolStartEvent("failing_tool", "run-1"));
+      processor.processEvent(
+        acc,
+        toolErrorEvent("failing_tool", "run-1", "Connection timeout"),
+        onPartial
+      );
+
+      const deltas = onPartial.mock.calls.map(
+        (call: any[]) => JSON.parse(call[0]).delta
+      );
+      expect(deltas).toContainEqual({
+        type: "tool_output_chunk",
+        stepId: "toolu_1",
+        chunk: "Error: Connection timeout",
+      });
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.toolBlocksByRunId.size).toBe(0);
+      const step = processor
+        .getResult(acc)
+        .content.contentChains![0].steps.find(s => s.id === "toolu_1");
+      expect(step?.output).toBe("Error: Connection timeout");
+    });
+
+    it("never closes another tool's pending step", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          { type: "tool_use", id: "toolu_1", name: "search", input: "" },
+        ])
+      );
+      processor.processEvent(
+        acc,
+        toolErrorEvent("failing_tool", "run-9", "Connection timeout")
+      );
+
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.pendingToolBlocks.map(b => b.id)).toEqual(["toolu_1"]);
+    });
+  });
+
+  describe("getResult - a call whose end never came", () => {
+    it("closes it with a result that says so, and leaves a finished call as it was", () => {
+      const acc = createAccumulator();
+
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          { type: "tool_use", id: "toolu_1", name: "research", input: "" },
+        ])
+      );
+      processor.processEvent(acc, toolStartEvent("research", "run-1"));
+      processor.processEvent(
+        acc,
+        chatModelStreamEvent([
+          { type: "tool_use", id: "toolu_2", name: "search", input: "" },
+        ])
+      );
+      processor.processEvent(acc, toolStartEvent("search", "run-2"));
+      processor.processEvent(acc, toolEndEvent("search", "run-2", "found"));
+
+      const steps = processor.getResult(acc).content.contentChains![0].steps;
+      expect(steps.map(s => [s.id, s.output])).toEqual([
+        ["toolu_1", "No result: the call's end was not received."],
+        ["toolu_2", "found"],
+      ]);
+      const state = acc.channels.get(StreamChannel.TEXT)!;
+      expect(state.toolBlocksByRunId.size).toBe(0);
+      expect(state.pendingToolBlocks).toHaveLength(0);
+    });
   });
 
   describe("processEvent - JSON output serialization", () => {
