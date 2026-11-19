@@ -30,6 +30,7 @@ import { IAgentToolConfig } from "../tools/config";
 import {
   isReasoningModel,
   hashToolsConfig as hashToolsConfigPure,
+  hashCustomTools,
   generateModelCacheKey as generateModelCacheKeyPure,
   buildOpenAIModelConfig,
   resolveRouterURL,
@@ -230,9 +231,14 @@ export class ModelInitializer implements IModelInitializer {
       ? `${withThinking}:rf:${JSON.stringify(config.requestFields)}`
       : withThinking;
     // Tool search binds a different tool set. Off → key unchanged.
-    return config.toolSearch?.enabled
+    const withSearch = config.toolSearch?.enabled
       ? `${withFields}:ts:${JSON.stringify(config.toolSearch)}`
       : withFields;
+    // The graph's own tools are bound too: two configs whose tools differ only
+    // in a description must not share an instance. None → key unchanged.
+    return config.customTools && config.customTools.length > 0
+      ? `${withSearch}:ct:${hashCustomTools(config.customTools)}`
+      : withSearch;
   }
 
   // Chat model creators
@@ -488,10 +494,15 @@ export class ModelInitializer implements IModelInitializer {
       toolsConfig,
       config.baseURL
     );
-    const cacheKey =
+    const withSampling =
       config.supportsSamplingParams === undefined
         ? baseCacheKey
         : `${baseCacheKey}:sp:${config.supportsSamplingParams}`;
+    // The custom tools bound below are part of the instance. None → key unchanged.
+    const cacheKey =
+      customTools && customTools.length > 0
+        ? `${withSampling}:ct:${hashCustomTools(customTools)}`
+        : withSampling;
 
     const cached = this.modelInstanceCache.get(cacheKey);
     if (cached) {

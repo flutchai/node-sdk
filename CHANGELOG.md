@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.17] - 2026-11-19
+
+### Fixed
+
+- **A model instance is cached with the graph's own tools.** `ModelInitializer` keyed its bound models by the model's settings and `toolsConfig` (mcp-runtime's tools) only; the `customTools` it binds were left out. Two configs of one agent whose own tools differed only in a description shared one bound model, and a turn whose calls reached two instances sent two tool lists — Claude refused the turn's thinking (`400 … bound to a different conversation … The tools list differs`) and the agent answered empty. The key now carries `hashCustomTools` (names, descriptions and schemas, in any order) when custom tools are bound; with none it is unchanged.
+
 ## [0.7.16] - 2026-11-04
 
 ### Fixed
