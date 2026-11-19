@@ -411,6 +411,27 @@ describe("thinking mode in ModelInitializer", () => {
     expect(bedrockMock).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps instances whose custom tools differ apart in the cache, and shares one for the same tools", async () => {
+    mockFetcher.mockResolvedValue(makeBedrockConfig());
+    const tool = (description: string) =>
+      ({ name: "research", description, schema: { type: "object" } }) as never;
+
+    await initializer.initializeChatModel({
+      modelId: "model-bedrock",
+      customTools: [tool("planned by the planner")],
+    });
+    await initializer.initializeChatModel({
+      modelId: "model-bedrock",
+      customTools: [tool("planned by you")],
+    });
+    await initializer.initializeChatModel({
+      modelId: "model-bedrock",
+      customTools: [tool("planned by you")],
+    });
+
+    expect(bedrockMock).toHaveBeenCalledTimes(2);
+  });
+
   it("passes the thinking mode to the Anthropic client on the router path, and nothing when unset", async () => {
     const anthropicMock = ChatAnthropic as unknown as jest.Mock;
     const router = {

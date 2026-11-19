@@ -1,6 +1,7 @@
 import {
   isReasoningModel,
   hashToolsConfig,
+  hashCustomTools,
   generateModelCacheKey,
   buildOpenAIModelConfig,
   normalizeToolConfigs,
@@ -35,6 +36,51 @@ describe("model.logic", () => {
       "mistral-large",
     ])('should return false for "%s"', name => {
       expect(isReasoningModel(name)).toBe(false);
+    });
+  });
+
+  describe("hashCustomTools", () => {
+    const research = {
+      name: "research",
+      description: "Hand over a question",
+      schema: { type: "object", properties: { question: { type: "string" } } },
+    };
+    const brandPack = {
+      name: "brand_pack",
+      description: "A brand's facts",
+      schema: { type: "object" },
+    };
+
+    it("is the same for the same tools in any order", () => {
+      expect(hashCustomTools([research, brandPack])).toBe(
+        hashCustomTools([brandPack, research])
+      );
+    });
+
+    it("differs when a tool's description or schema differs", () => {
+      const base = hashCustomTools([research]);
+      expect(
+        hashCustomTools([{ ...research, description: "Plan it yourself" }])
+      ).not.toBe(base);
+      expect(
+        hashCustomTools([
+          {
+            ...research,
+            schema: {
+              type: "object",
+              properties: { plan: { type: "object" } },
+            },
+          },
+        ])
+      ).not.toBe(base);
+    });
+
+    it("counts a schema that cannot be written as JSON by its name and description", () => {
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+      expect(() =>
+        hashCustomTools([{ name: "t", description: "d", schema: circular }])
+      ).not.toThrow();
     });
   });
 

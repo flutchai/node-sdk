@@ -389,6 +389,35 @@ export function hashToolsConfig(toolsConfig: IAgentToolConfig[]): string {
   return createHash("md5").update(sorted).digest("hex").slice(0, 16);
 }
 
+/** What a custom tool shows the model: its name, its description and its schema. */
+export interface CustomToolShape {
+  name: string;
+  description?: string;
+  schema?: unknown;
+}
+
+/**
+ * A short hash of the custom tools bound to a model: their names, descriptions and schemas, in any order. The model
+ * instance cache keyed only mcp-runtime's tools (`toolsConfig`): two configs of one agent whose own tools differed only
+ * in a description shared one bound model, and a turn whose calls saw two tool lists had its Claude thinking refused
+ * («bound to a different conversation … The tools list differs»). A schema that cannot be written as JSON counts by its
+ * tool's name and description.
+ */
+export function hashCustomTools(tools: CustomToolShape[]): string {
+  const shape = (schema: unknown): string => {
+    try {
+      return JSON.stringify(schema ?? null);
+    } catch {
+      return "unserializable";
+    }
+  };
+  const sorted = tools
+    .map(t => `${t.name}\u0000${t.description ?? ""}\u0000${shape(t.schema)}`)
+    .sort()
+    .join("|");
+  return createHash("md5").update(sorted).digest("hex").slice(0, 16);
+}
+
 /**
  * Normalize flexible ToolConfig[] (from graph configs) into IAgentToolConfig[] (SDK internal format).
  */
