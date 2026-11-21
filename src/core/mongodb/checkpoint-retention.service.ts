@@ -7,10 +7,8 @@ import {
 } from "@nestjs/common";
 import { randomUUID } from "crypto";
 import type { Connection } from "mongoose";
-import {
-  pruneCheckpoints,
-  PruneCheckpointsParams,
-} from "./checkpoint-retention";
+import { pruneCheckpoints } from "./checkpoint-retention";
+import type { PruneCheckpointsParams } from "./checkpoint-retention";
 
 export const CHECKPOINT_RETENTION_PARAMS = "CHECKPOINT_RETENTION_PARAMS";
 
