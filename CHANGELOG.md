@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.18] - 2026-11-21
+
+### Added
+
+- **Checkpoint retention for MongoDB.** `mongodb.retention` in `UniversalGraphModule.forRoot()` runs `pruneCheckpoints` every `intervalMinutes` (360 by default): all checkpoints of a thread but the latest, with their writes, go once older than `minAgeHours` (24 by default); with `idleThreadDays`, a thread silent that long loses all of them unless `protectedThreadIds` returns it. A run reads only the latest checkpoint of its thread, so the deleted ones had no reader. `pruneCheckpoints` is exported for services that run their own checkpointer.
+- **`checkpointDurability`.** Sets LangGraph's `durability` for every run of the service unless a run's config sets its own. `"exit"` writes one checkpoint per run, at its end or at a HITL interrupt, instead of one after every step.
+
 ## [0.7.17] - 2026-11-19
 
 ### Fixed
