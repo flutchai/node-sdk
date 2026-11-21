@@ -4,7 +4,12 @@ import { ModuleRef, DiscoveryModule, MetadataScanner } from "@nestjs/core";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import mongoose, { Connection } from "mongoose";
 import { MongoDBSaver } from "@langchain/langgraph-checkpoint-mongodb";
-import { createMongoClientAdapter } from "./mongodb";
+import {
+  createMongoClientAdapter,
+  CheckpointRetentionOptions,
+  CheckpointRetentionService,
+  CHECKPOINT_RETENTION_PARAMS,
+} from "./mongodb";
 import { redactConnectionString } from "../utils/redact.utils";
 import {
   AbstractGraphBuilder,
@@ -15,6 +20,7 @@ import {
   VersioningConfig,
 } from "../graph";
 import {
+  CheckpointDurability,
   EventProcessor,
   GraphEngineFactory,
   GraphEngineType,
@@ -57,6 +63,11 @@ export interface MongoDBConfig {
   checkpointCollectionName?: string;
   /** Checkpoint writes collection name (default: "checkpoint_writes") */
   checkpointWritesCollectionName?: string;
+  /**
+   * Deletes checkpoints no run will read again: all but the latest of every
+   * thread, and optionally whole idle threads. Off when unset.
+   */
+  retention?: CheckpointRetentionOptions;
 }
 
 /**
@@ -112,6 +123,12 @@ export interface UniversalGraphModuleOptions {
   mongodb?: MongoDBConfig;
   // If neither postgres nor mongodb is configured, the module falls back to
   // an in-memory checkpointer (no persistence across restarts).
+  /**
+   * When graph runs write checkpoints (LangGraph `durability`) unless a run's
+   * config sets its own. `"exit"` writes one per run, at its end; LangGraph's
+   * default `"async"` writes one after every step.
+   */
+  checkpointDurability?: CheckpointDurability;
 }
 
 /**
@@ -315,6 +332,22 @@ function buildCheckpointerProviders(
         },
         inject: ["MONGO_CONNECTION", ConfigService],
       },
+      ...(options.mongodb.retention
+        ? [
+            {
+              provide: CHECKPOINT_RETENTION_PARAMS,
+              useValue: {
+                ...options.mongodb.retention,
+                checkpointCollectionName:
+                  options.mongodb.checkpointCollectionName ?? "checkpoints",
+                checkpointWritesCollectionName:
+                  options.mongodb.checkpointWritesCollectionName ??
+                  "checkpoint_writes",
+              },
+            },
+            CheckpointRetentionService,
+          ]
+        : []),
     ];
   }
 
@@ -351,7 +384,10 @@ export class UniversalGraphModule {
         useFactory: (
           eventProcessor: EventProcessor,
           configService: ConfigService
-        ) => new LangGraphEngine(eventProcessor, configService),
+        ) =>
+          new LangGraphEngine(eventProcessor, configService, {
+            durability: options.checkpointDurability,
+          }),
         inject: [EventProcessor, ConfigService],
       },
       BuilderRegistryService,

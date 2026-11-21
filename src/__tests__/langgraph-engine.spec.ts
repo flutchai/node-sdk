@@ -420,6 +420,60 @@ describe("LangGraphEngine", () => {
     });
   });
 
+  describe("checkpoint durability", () => {
+    const streamOnce = () => ({
+      streamEvents: jest.fn().mockImplementation(async function* () {
+        yield { event: "on_chat_model_end", data: {} };
+      }),
+    });
+
+    it("applies the module's durability to a run", async () => {
+      const durableEngine = new LangGraphEngine(
+        mockEventProcessor,
+        mockConfigService,
+        { durability: "exit" }
+      );
+      const graph = streamOnce();
+
+      await durableEngine.streamGraph(graph, { input: {} }, jest.fn());
+
+      expect(graph.streamEvents).toHaveBeenCalledWith(
+        {},
+        expect.objectContaining({ durability: "exit" })
+      );
+    });
+
+    it("lets a run's own config override the module's durability", async () => {
+      const durableEngine = new LangGraphEngine(
+        mockEventProcessor,
+        mockConfigService,
+        { durability: "exit" }
+      );
+      const graph = streamOnce();
+
+      await durableEngine.streamGraph(
+        graph,
+        { input: {}, config: { durability: "sync" } },
+        jest.fn()
+      );
+
+      expect(graph.streamEvents).toHaveBeenCalledWith(
+        {},
+        expect.objectContaining({ durability: "sync" })
+      );
+    });
+
+    it("leaves durability to LangGraph when the module sets none", async () => {
+      const graph = streamOnce();
+
+      await engine.streamGraph(graph, { input: {} }, jest.fn());
+
+      expect(graph.streamEvents.mock.calls[0][1]).not.toHaveProperty(
+        "durability"
+      );
+    });
+  });
+
   describe("invokeGraph", () => {
     it("should invoke graph and return processed result", async () => {
       // Arrange

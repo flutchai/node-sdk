@@ -5,6 +5,14 @@ import { ConfigService } from "@nestjs/config";
 import { clearAttachmentDataStore } from "../../graph/attachment-tool-node";
 import { withFlutchContext, FlutchContext } from "../../models/flutch-context";
 
+/** When a run writes checkpoints — LangGraph's `durability`. */
+export type CheckpointDurability = "exit" | "async" | "sync";
+
+export interface LangGraphEngineOptions {
+  /** Applied to every run whose config does not set its own `durability`. */
+  durability?: CheckpointDurability;
+}
+
 /**
  * Graph engine implemented using LangGraph.js
  */
@@ -16,11 +24,19 @@ export class LangGraphEngine implements IGraphEngine {
 
   constructor(
     private readonly eventProcessor: EventProcessor,
-    @Optional() private readonly configService?: ConfigService
+    @Optional() private readonly configService?: ConfigService,
+    @Optional() private readonly options: LangGraphEngineOptions = {}
   ) {
     if (!eventProcessor) {
       this.logger.error("EventProcessor is undefined/null!");
     }
+  }
+
+  /** Run options a payload's config may override. */
+  private runDefaults(): { durability?: CheckpointDurability } {
+    return this.options.durability
+      ? { durability: this.options.durability }
+      : {};
   }
 
   /**
@@ -98,6 +114,7 @@ export class LangGraphEngine implements IGraphEngine {
 
         try {
           const result = await graph.invoke(input, {
+            ...this.runDefaults(),
             ...preparedPayload.config,
             signal: preparedPayload.signal,
           });
@@ -155,6 +172,7 @@ export class LangGraphEngine implements IGraphEngine {
       const input = await this.deserializeInput(preparedPayload.input || {});
 
       const eventStream = await graph.streamEvents(input, {
+        ...this.runDefaults(),
         ...preparedPayload.config,
         signal: preparedPayload.signal, // Include abort signal
         version: "v2", // Important for correct operation
