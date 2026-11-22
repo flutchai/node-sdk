@@ -49,6 +49,7 @@ import {
   wrapCohereFetcher,
 } from "./flutch-context";
 import { FlutchChatBedrockConverse } from "./bedrock-chat-model";
+import { FlutchChatAnthropic } from "./anthropic-chat-model";
 import { fetcher as cohereDefaultFetcher } from "cohere-ai/core";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
@@ -299,7 +300,7 @@ export class ModelInitializer implements IModelInitializer {
         defaultThinking && { thinking: { type: defaultThinking } },
         requestFields
       ) ?? {};
-      return new ChatAnthropic({
+      return new FlutchChatAnthropic({
         modelName,
         // Claude Opus 4.7+ / Claude 5 reject `temperature` outright — the key
         // must be absent, not `undefined`.
