@@ -6,4 +6,5 @@ export * from "./model.initializer";
 export * from "./model.logic";
 export * from "./reasoning-content.logic";
 export * from "./bedrock-chat-model";
+export * from "./anthropic-chat-model";
 export * from "./rerankers/voyageai-rerank";

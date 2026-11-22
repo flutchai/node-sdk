@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.19] - 2026-11-22
+
+### Fixed
+
+- **No `thinking` the caller did not ask for on the Anthropic path.** `@langchain/anthropic` puts `thinking: { type: "disabled" }` into every request when none is set; Claude Sonnet 5.5 on the direct API rejects it (400, asks for `between_tools`). The router path now builds `FlutchChatAnthropic`, which leaves `thinking` out of the request unless the call or the catalog set it, so an unset mode means the model's own default. An explicit mode, `disabled` included, is sent as given.
+
 ## [0.7.18] - 2026-11-21
 
 ### Added
