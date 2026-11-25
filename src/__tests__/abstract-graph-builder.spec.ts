@@ -420,6 +420,7 @@ describe("UniversalGraphService", () => {
     mockBuilder = {
       graphType: "test::1.0.0",
       buildGraph: jest.fn().mockResolvedValue({ compiled: true }),
+      threadCompaction: jest.fn().mockReturnValue({ maxTriggerTokens: 9_000 }),
       preparePayload: jest.fn().mockResolvedValue({
         configurable: { thread_id: "t-1" },
       }),
@@ -497,7 +498,12 @@ describe("UniversalGraphService", () => {
 
       expect(mockBuilder.buildGraph).toHaveBeenCalledWith(payload);
       expect(mockBuilder.preparePayload).toHaveBeenCalledWith(payload);
-      expect(mockEngine.invokeGraph).toHaveBeenCalled();
+      expect(mockEngine.invokeGraph).toHaveBeenCalledWith(
+        { compiled: true },
+        expect.anything(),
+        expect.any(AbortSignal),
+        { compaction: { maxTriggerTokens: 9_000 } }
+      );
       expect(result.requestId).toBe("r-1");
       expect(result.text).toBe("Hello");
     });

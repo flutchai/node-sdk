@@ -10,3 +10,4 @@ export * from "./reasoning";
 export * from "./streaming";
 export * from "./tracing";
 export * from "./thinking";
+export * from "./auto-compact";

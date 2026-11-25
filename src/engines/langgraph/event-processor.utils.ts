@@ -18,6 +18,7 @@ import {
   thinkingTexts,
 } from "./stream-thinking";
 import { sanitizeTraceData } from "../api-call-tracer.utils";
+import { NO_STREAM_TAG } from "../../messages/auto-compact";
 
 /**
  * LLM call record collected from on_chat_model_end events
@@ -517,6 +518,15 @@ export class EventProcessor {
         );
       }
 
+      return;
+    }
+
+    // A call the graph makes for itself (e.g. a history summary) is traced, not shown.
+    if (
+      event.event === "on_chat_model_stream" &&
+      Array.isArray(event.tags) &&
+      event.tags.includes(NO_STREAM_TAG)
+    ) {
       return;
     }
 
