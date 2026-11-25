@@ -8,6 +8,7 @@ import type {
   IGraphResponsePayload,
   IGraphService,
 } from ".";
+import type { ThreadCompactionHooks } from "./thread-compaction";
 import { CallbackResult } from "../callbacks";
 import { EndpointRegistry } from "../agent-ui";
 import {
@@ -269,6 +270,17 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
   }
 
   /**
+   * The graph's part in the agent's auto-compaction (`threadSettings.autoCompact`), which the SDK runs before the
+   * graph: which messages are its own signals, what the summary must keep, its ceiling on the history. The default
+   * compacts the `messages` channel as it is; return null when the state keeps no history to compact.
+   */
+  threadCompaction(
+    _payload: IGraphRequestPayload
+  ): ThreadCompactionHooks | null {
+    return {};
+  }
+
+  /**
    * Load graph manifest (if using manifest-based approach)
    */
   protected async loadManifest(): Promise<IGraphManifest | null> {
@@ -415,13 +427,24 @@ export abstract class AbstractGraphBuilder<V extends string = string> {
 /**
  * Interface for graph engine
  */
+export interface GraphRunOptions {
+  /** The graph's part in the agent's auto-compaction; null when its state keeps no history to compact. */
+  compaction?: ThreadCompactionHooks | null;
+}
+
 export interface IGraphEngine {
-  invokeGraph(graph: any, config: any, signal?: AbortSignal): Promise<any>;
+  invokeGraph(
+    graph: any,
+    config: any,
+    signal?: AbortSignal,
+    options?: GraphRunOptions
+  ): Promise<any>;
   streamGraph(
     graph: any,
     config: any,
     onPartial: (chunk: string) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options?: GraphRunOptions
   ): Promise<any>;
 }
 
@@ -485,7 +508,8 @@ export class UniversalGraphService implements IGraphService {
       const result = await this.engine.invokeGraph(
         graph,
         config,
-        abortController.signal
+        abortController.signal,
+        { compaction: builder.threadCompaction(payload) }
       );
 
       // Form response
@@ -542,7 +566,8 @@ export class UniversalGraphService implements IGraphService {
         graph,
         graphRequest,
         onPartial,
-        abortController.signal
+        abortController.signal,
+        { compaction: builder.threadCompaction(payload) }
       );
 
       this.logger.debug(`[STREAM-RESULT] Engine returned:`, {

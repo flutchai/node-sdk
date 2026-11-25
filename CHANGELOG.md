@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.20] - 2026-11-24
+
+### Added
+
+- **Auto-compaction of a thread's history, set on the agent.** The platform sends the agent's `threadSettings.autoCompact` (`true`, or `{ enabled, triggerTokens, keepRecentTurns, modelId, instructions }`; unset is off) in `configurable.threadSettings`, and the engine compacts the thread before the graph runs: once the history with the run's new messages would carry more than `triggerTokens` (100 000 by default), the earlier turns are replaced by one summary and the last `keepRecentTurns` client turns (1 by default) stay word for word, without the model's thinking — a Claude 5.x thinking block replayed after the history before it changed is rejected. The rewrite goes into the run's input, so the state changes in the same write that adds the new turn. A resumed or parked run, and a failed summary, leave the history as it is. The summary is written by `modelId`, else the graph's, else `graphSettings.modelId`. Graphs need no code: `AbstractGraphBuilder.threadCompaction(payload)` returns `{}` by default and may say which messages are its own signals (`isHidden`, `isClientMessage`), what the summary must keep (`instructions`) and its ceiling on the history (`maxTriggerTokens`), or null to opt out. A service running a graph itself calls `compactThreadInput(graph, input, config, options)`; `autoCompact(messages, options)` compacts a list in place of the state.
+- **`nostream` tag.** A model call tagged `nostream` stays off the client's stream; it is still traced and billed. The summary call carries it.
+
 ## [0.7.19] - 2026-11-22
 
 ### Fixed

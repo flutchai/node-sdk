@@ -127,6 +127,23 @@ describe("EventProcessor", () => {
       expect(parsed.delta.type).toBe("text_chunk");
       expect(parsed.delta.text).toBe("Hi");
     });
+
+    it("keeps a call tagged nostream off the client's stream", () => {
+      const acc = createAccumulator();
+      const onPartial = jest.fn();
+
+      processor.processEvent(
+        acc,
+        {
+          ...chatModelStreamEvent([{ type: "text", text: "a summary" }]),
+          tags: ["nostream", "auto_compact"],
+        },
+        onPartial
+      );
+
+      expect(onPartial).not.toHaveBeenCalled();
+      expect(acc.channels.get(StreamChannel.TEXT)!.currentBlock).toBeNull();
+    });
   });
 
   describe("processEvent - the model's thoughts as they stream", () => {

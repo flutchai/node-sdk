@@ -1,5 +1,12 @@
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { IGraphEngine } from "../../core";
+import type { GraphRunOptions } from "../../graph/abstract-graph.builder";
+import {
+  compactThreadInput,
+  threadCompactSettingsOf,
+} from "../../graph/thread-compaction";
+import type { ModelInitializer } from "../../models/model.initializer";
+import type { SummaryModel } from "../../messages/auto-compact";
 import { EventProcessor } from "./event-processor.utils";
 import { ConfigService } from "@nestjs/config";
 import { clearAttachmentDataStore } from "../../graph/attachment-tool-node";
@@ -30,6 +37,66 @@ export class LangGraphEngine implements IGraphEngine {
     if (!eventProcessor) {
       this.logger.error("EventProcessor is undefined/null!");
     }
+  }
+
+  private summaryModels?: ModelInitializer;
+
+  /** Token cap of the summary the auto-compaction asks for. */
+  private static readonly SUMMARY_MAX_TOKENS = 8000;
+
+  /**
+   * The input with the thread's history compacted in front of it when the agent's auto-compaction calls for it
+   * (see compactThreadInput); the input as it is otherwise, and when compaction fails — the run goes on with the
+   * whole history.
+   */
+  private async compactInput(
+    graph: any,
+    input: any,
+    preparedPayload: any,
+    options?: GraphRunOptions
+  ): Promise<any> {
+    const config = preparedPayload.config ?? {};
+    const settings = threadCompactSettingsOf(config);
+    if (!settings || !options?.compaction) return input;
+    const onError = (error: unknown) =>
+      this.logger.warn({
+        message: "Auto-compaction failed, history kept",
+        threadId: this.extractThreadId(preparedPayload),
+        error: error instanceof Error ? error.message : String(error),
+      });
+    try {
+      const compacted = await compactThreadInput(graph, input, config, {
+        ...options.compaction,
+        settings,
+        createModel: modelId => this.summaryModel(modelId),
+        onError,
+      });
+      if (!compacted) return input;
+      this.logger.log({
+        message: "Thread history auto-compacted",
+        threadId: this.extractThreadId(preparedPayload),
+        summarizedMessages: compacted.result.summarizedMessages,
+        tokensBefore: compacted.result.tokensBefore,
+        tokensAfter: compacted.result.tokensAfter,
+      });
+      return compacted.input;
+    } catch (error) {
+      onError(error);
+      return input;
+    }
+  }
+
+  private async summaryModel(modelId: string): Promise<SummaryModel> {
+    if (!this.summaryModels) {
+      // Loaded on first use: the initializer pulls every provider's client.
+      const { ModelInitializer } =
+        await import("../../models/model.initializer");
+      this.summaryModels = new ModelInitializer();
+    }
+    return (await this.summaryModels.initializeChatModel({
+      modelId,
+      maxTokens: LangGraphEngine.SUMMARY_MAX_TOKENS,
+    })) as SummaryModel;
   }
 
   /** Run options a payload's config may override. */
@@ -94,7 +161,8 @@ export class LangGraphEngine implements IGraphEngine {
   async invokeGraph(
     graph: any,
     preparedPayload: any,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options?: GraphRunOptions
   ): Promise<any> {
     return withFlutchContext(
       this.extractFlutchContext(preparedPayload),
@@ -109,8 +177,12 @@ export class LangGraphEngine implements IGraphEngine {
           );
         }
 
-        // Deserialize input if needed
-        const input = await this.deserializeInput(preparedPayload.input || {});
+        const input = await this.compactInput(
+          graph,
+          await this.deserializeInput(preparedPayload.input || {}),
+          preparedPayload,
+          options
+        );
 
         try {
           const result = await graph.invoke(input, {
@@ -139,10 +211,11 @@ export class LangGraphEngine implements IGraphEngine {
     graph: any,
     preparedPayload: any,
     onPartial: (chunk: string) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options?: GraphRunOptions
   ): Promise<any> {
     return withFlutchContext(this.extractFlutchContext(preparedPayload), () =>
-      this.streamGraphInner(graph, preparedPayload, onPartial, signal)
+      this.streamGraphInner(graph, preparedPayload, onPartial, signal, options)
     );
   }
 
@@ -150,7 +223,8 @@ export class LangGraphEngine implements IGraphEngine {
     graph: any,
     preparedPayload: any,
     onPartial: (chunk: string) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options?: GraphRunOptions
   ): Promise<any> {
     // Create accumulator BEFORE try block to ensure it's available in finally
     const acc = this.eventProcessor.createAccumulator();
@@ -169,7 +243,12 @@ export class LangGraphEngine implements IGraphEngine {
         this.logger.debug("[ENGINE] Signal assigned to preparedPayload.signal");
       }
 
-      const input = await this.deserializeInput(preparedPayload.input || {});
+      const input = await this.compactInput(
+        graph,
+        await this.deserializeInput(preparedPayload.input || {}),
+        preparedPayload,
+        options
+      );
 
       const eventStream = await graph.streamEvents(input, {
         ...this.runDefaults(),

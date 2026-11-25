@@ -10,3 +10,4 @@ export * from "./tracing";
 export * from "./versioning";
 export * from "./graph-types";
 export * from "./attachment-tool-node";
+export * from "./thread-compaction";
